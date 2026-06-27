@@ -1,0 +1,630 @@
+Awesome! 🎉
+
+I think this is a solid architecture now. It's not over-engineered, but it's also not a "tutorial project." It's something we can realistically finish and continue improving over time.
+
+From now on, let's treat this like a real software project.
+
+---
+
+# 🚀 Project: Kronos
+
+> **Kronos is an extensible algorithmic trading platform capable of running multiple strategies concurrently across one or more brokers with real-time market data and configurable risk management.**
+
+---
+
+# Development Rules
+
+Before we write any code, let's define a few rules that we won't break.
+
+## Rule 1: Strategy never talks to Broker
+
+❌ Wrong
+
+```ts
+strategy.buy();
+```
+
+✅ Correct
+
+```text
+Strategy
+    ↓
+Signal
+    ↓
+Risk Engine
+    ↓
+Order Engine
+    ↓
+Broker
+```
+
+This allows us to add logging, risk checks, paper trading, etc., without changing strategies.
+
+---
+
+## Rule 2: Broker is Replaceable
+
+The Strategy should never know whether it's using:
+
+* Kotak
+* Zerodha
+* Upstox
+* Paper Broker
+
+It only knows:
+
+```ts
+broker.placeOrder(...)
+```
+
+---
+
+## Rule 3: Everything has one responsibility
+
+Instead of:
+
+```text
+MarketService
+
+↓
+
+Gets Tick
+
+Calculates EMA
+
+Places Order
+
+Stores DB
+```
+
+We'll do:
+
+```text
+Market Engine
+
+↓
+
+Strategy Engine
+
+↓
+
+Risk Engine
+
+↓
+
+Order Engine
+```
+
+Each module has one clear job.
+
+---
+
+## Rule 4: Strategy is a Plugin
+
+Tomorrow we should be able to add:
+
+```
+EMA Strategy
+```
+
+without changing the engine.
+
+Next week:
+
+```
+ORB Strategy
+```
+
+Same engine.
+
+---
+
+# 📁 Repository Structure
+
+This is what I think we'll use.
+
+```text
+kronos/
+│
+├── apps/
+│   ├── frontend/         # Next.js Dashboard
+│   ├── api/              # Fastify API
+│   └── worker/           # Algo Engine
+│
+├── packages/
+│   ├── broker/
+│   ├── strategy-engine/
+│   ├── indicators/
+│   ├── market/
+│   ├── shared/
+│   ├── database/
+│   ├── config/
+│   └── logger/
+│
+├── docker/
+│
+├── docs/
+│
+├── turbo.json
+│
+└── package.json
+```
+
+Notice there are only **8 shared packages**.
+
+Not 25.
+
+---
+
+# apps/frontend
+
+Nothing trading-related happens here.
+
+Responsibilities:
+
+* Login
+* Dashboard
+* Charts
+* Option Chain
+* Watchlist
+* Strategies
+* Portfolio
+* Logs
+
+---
+
+# apps/api
+
+Responsibilities:
+
+```
+Authentication
+
+REST APIs
+
+Broker Login
+
+WebSocket
+
+Database
+
+Configuration
+```
+
+It does **not** execute algorithms.
+
+---
+
+# apps/worker
+
+Responsibilities:
+
+```
+Run Strategies
+
+Receive Market Data
+
+Risk Check
+
+Orders
+
+Execution
+```
+
+This is our robot.
+
+---
+
+# packages/broker
+
+```
+Broker Interface
+
+Kotak Adapter
+
+Paper Broker
+
+Types
+```
+
+---
+
+# packages/strategy-engine
+
+Contains
+
+```ts
+Strategy
+
+Strategy Manager
+
+Strategy Registry
+
+Signal
+```
+
+This is the heart.
+
+---
+
+# packages/indicators
+
+Contains
+
+```
+EMA
+
+RSI
+
+MACD
+
+VWAP
+
+ATR
+
+...
+```
+
+Pure functions.
+
+---
+
+# packages/market
+
+Contains
+
+```
+Tick
+
+Candle Builder
+
+Market Events
+
+Normalizer
+```
+
+Nothing else.
+
+---
+
+# packages/shared
+
+Everything common.
+
+```
+Enums
+
+Types
+
+Constants
+
+Helpers
+
+Errors
+```
+
+---
+
+# packages/database
+
+Prisma
+
+Repositories
+
+Database Models
+
+---
+
+# packages/logger
+
+Central logging.
+
+We'll probably use **Pino**.
+
+---
+
+# 🧠 Worker Architecture
+
+This is what excites me the most.
+
+```text
+Worker Starts
+
+↓
+
+Load Config
+
+↓
+
+Connect Broker
+
+↓
+
+Load Running Strategies
+
+↓
+
+Subscribe Market
+
+↓
+
+Receive Tick
+
+↓
+
+Strategy Manager
+
+↓
+
+Risk Engine
+
+↓
+
+Order Engine
+
+↓
+
+Broker
+
+↓
+
+Order Update
+
+↓
+
+Strategy Manager
+```
+
+It loops forever.
+
+---
+
+# Strategy Manager
+
+Suppose database says
+
+| Strategy | Symbol    |
+| -------- | --------- |
+| EMA      | NIFTY     |
+| EMA      | BANKNIFTY |
+| ORB      | RELIANCE  |
+| AI       | INFY      |
+
+Worker creates
+
+```
+EMA Instance #1
+
+EMA Instance #2
+
+ORB Instance
+
+AI Instance
+```
+
+Every tick
+
+```ts
+for (const strategy of strategies) {
+    strategy.onTick(tick);
+}
+```
+
+Simple.
+
+---
+
+# Event Bus
+
+After our discussion, this is finalized.
+
+✅ Yes
+
+Internal only.
+
+Using Node's EventEmitter.
+
+Purpose:
+
+```
+Market Tick
+
+↓
+
+Strategy
+
+↓
+
+Signal
+
+↓
+
+Risk
+
+↓
+
+Order Filled
+
+↓
+
+Logger
+
+↓
+
+Frontend
+```
+
+No Redis Pub/Sub.
+
+No Kafka.
+
+---
+
+# Database
+
+We'll store
+
+✅ Users
+
+✅ Strategies
+
+✅ Strategy Instances
+
+✅ Orders
+
+✅ Executions
+
+✅ Positions
+
+✅ Settings
+
+We'll **not** store every market tick.
+
+---
+
+# Technology Stack
+
+## Frontend
+
+* Next.js
+* React
+* TypeScript
+* Tailwind
+* Zustand
+* TanStack Query
+* TradingView Lightweight Charts
+
+---
+
+## Backend
+
+* Fastify
+* TypeScript
+* Prisma
+* PostgreSQL
+* Redis
+* Pino
+* ws (Native WebSocket)
+
+---
+
+## Worker
+
+* TypeScript
+* EventEmitter
+* Shared Packages
+
+---
+
+# Milestone Plan
+
+## Milestone 1
+
+✅ Turborepo
+
+✅ Docker
+
+✅ PostgreSQL
+
+✅ Redis
+
+✅ Shared Config
+
+---
+
+## Milestone 2
+
+Broker Package
+
+---
+
+## Milestone 3
+
+Authentication
+
+---
+
+## Milestone 4
+
+Historical Data
+
+---
+
+## Milestone 5
+
+Live Market Data
+
+---
+
+## Milestone 6
+
+Dashboard
+
+---
+
+## Milestone 7
+
+Strategy Engine
+
+---
+
+## Milestone 8
+
+Paper Trading
+
+---
+
+## Milestone 9
+
+Live Trading
+
+---
+
+# One Improvement Before We Start
+
+There is **one thing** I want to add because I think it will save us a lot of headaches later.
+
+## `packages/core`
+
+Instead of putting the Event Bus, lifecycle management, and dependency injection logic into random places, I'd like a dedicated `core` package.
+
+It would contain things like:
+
+```
+packages/core
+
+Event Bus
+
+Lifecycle Manager
+
+Dependency Container
+
+Base Services
+
+Application Context
+```
+
+This isn't about making things fancy. It's about having a single place for the infrastructure that both the API and Worker share, instead of duplicating it later.
+
+---
+
+# 🎯 Our First Coding Task
+
+I don't want our first commit to be "create-next-app."
+
+Instead, our first milestone will be:
+
+**"Kronos boots successfully."**
+
+That means:
+
+* Turborepo is initialized.
+* Frontend, API, and Worker all start with one command.
+* PostgreSQL and Redis start with Docker Compose.
+* Shared packages compile correctly.
+* Path aliases work.
+* Hot reload works across the monorepo.
+* A simple `/health` endpoint in the API responds.
+* The Worker logs: `Kronos Worker Started`.
+
+Once that foundation is in place, every feature we build afterwards will fit into a clean, well-tested architecture instead of being bolted on. I think that's the best way to start a project we expect to grow over time.

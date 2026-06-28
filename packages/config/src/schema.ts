@@ -8,6 +8,10 @@ export const envSchema = z.object({
   DATABASE_URL: z.url(),
 
   REDIS_URL: z.url(),
+
+  LOG_LEVEL: z
+    .enum(["trace", "debug", "info", "warn", "error", "fatal"])
+    .default("info"),
 });
 
 export type Env = z.infer<typeof envSchema>;

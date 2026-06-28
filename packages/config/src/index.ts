@@ -12,7 +12,11 @@ export const config = {
   },
 
   redis: {
-    url: env.REDIS_URL, 
+    url: env.REDIS_URL,
+  },
+
+  logging: {
+    level: env.LOG_LEVEL,
   },
 } as const;
 

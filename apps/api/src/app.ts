@@ -1,14 +1,17 @@
 import Fastify from "fastify";
 
-import { createLogger, loggerOptions } from "@kronos/logger";
-import { healthRoutes } from "./routes/health";
+import { loggerOptions } from "@kronos/logger";
+import { registerModules } from "./modules";
+import { registerPlugins } from "./plugins";
 
 export async function buildApp() {
   const app = Fastify({
     logger: loggerOptions,
   });
 
-  await app.register(healthRoutes);
+  await registerPlugins(app);
+
+  await registerModules(app);
 
   return app;
 }

@@ -1,8 +1,12 @@
 import { FastifyInstance } from "fastify";
-import { getUsers } from "./controller.js";
+import { UsersController } from "./controller.js";
+import { UsersService } from "./service.js";
 
 export async function usersRoutes(app: FastifyInstance) {
+  const usersService = new UsersService(app.db);
+  const usersController = new UsersController(usersService);
+
   app.get("/users", async () => {
-    return getUsers(app.db);
+    return usersController.getAll();
   });
 }

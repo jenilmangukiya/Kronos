@@ -1,5 +1,10 @@
 import { FastifyInstance } from "fastify";
+import { UsersService } from "./service.js";
 
-export async function getUsers(db: FastifyInstance["db"]) {
-  return db.user.findMany();
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  async getAll() {
+    return this.usersService.getAll();
+  }
 }

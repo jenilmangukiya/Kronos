@@ -4,8 +4,18 @@ export interface RegisterInput {
   password: string;
 }
 
-export interface AuthResponse {
-  id: string;
+export interface LoginInput {
   email: string;
-  name: string | null;
+  password: string;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+  };
 }

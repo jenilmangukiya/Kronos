@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { StringValue } from "ms";
 
 export const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]),
@@ -15,9 +16,9 @@ export const envSchema = z.object({
 
   JWT_SECRET: z.string().min(1),
 
-  JWT_ACCESS_EXPIRES_IN: z.string(),
+  JWT_ACCESS_EXPIRES_IN: z.custom<StringValue>(),
 
-  JWT_REFRESH_EXPIRES_IN: z.string(),
+  JWT_REFRESH_EXPIRES_IN: z.custom<StringValue>(),
 });
 
 export type Env = z.infer<typeof envSchema>;

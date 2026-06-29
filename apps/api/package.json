@@ -17,7 +17,9 @@
     "@fastify/sensible": "^6.0.4",
     "@kronos/config": "workspace:*",
     "@kronos/logger": "workspace:*",
+    "@kronos/database": "workspace:*",
     "@kronos/typescript-config": "workspace:*",
-    "fastify": "^5.8.5"
+    "fastify": "^5.8.5",
+    "fastify-plugin": "^6.0.0"
   }
 }

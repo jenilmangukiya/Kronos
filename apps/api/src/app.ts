@@ -16,5 +16,15 @@ export async function buildApp() {
 
   await registerModules(app);
 
+  app.get(
+    "/profile",
+    {
+      preHandler: [app.authenticate],
+    },
+    async (request) => {
+      return request.user;
+    },
+  );
+
   return app;
 }

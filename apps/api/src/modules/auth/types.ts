@@ -19,3 +19,7 @@ export interface AuthResponse {
     name: string | null;
   };
 }
+
+export interface RefreshInput {
+  refreshToken: string;
+}

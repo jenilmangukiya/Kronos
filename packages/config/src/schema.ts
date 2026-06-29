@@ -12,6 +12,12 @@ export const envSchema = z.object({
   LOG_LEVEL: z
     .enum(["trace", "debug", "info", "warn", "error", "fatal"])
     .default("info"),
+
+  JWT_SECRET: z.string().min(1),
+
+  JWT_ACCESS_EXPIRES_IN: z.string(),
+
+  JWT_REFRESH_EXPIRES_IN: z.string(),
 });
 
 export type Env = z.infer<typeof envSchema>;

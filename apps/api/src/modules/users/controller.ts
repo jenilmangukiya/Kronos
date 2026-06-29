@@ -1,4 +1,3 @@
-import { FastifyInstance } from "fastify";
 import { UsersService } from "./service.js";
 
 export class UsersController {

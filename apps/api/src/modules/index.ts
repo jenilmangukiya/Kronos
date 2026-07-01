@@ -4,6 +4,7 @@ import { authRoutes } from "./auth/index.js";
 import { healthRoutes } from "./health/routes.js";
 import { usersRoutes } from "./users/routes.js";
 import { brokerRoutes } from "./broker/routes.js";
+import { marketDataRoutes } from "./market-data/routes.js";
 
 export async function registerModules(app: FastifyInstance) {
   // Health
@@ -17,4 +18,7 @@ export async function registerModules(app: FastifyInstance) {
 
   // Broker
   await app.register(brokerRoutes);
+
+  // Market Data
+  await app.register(marketDataRoutes);
 }

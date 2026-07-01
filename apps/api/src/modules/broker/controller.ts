@@ -40,4 +40,36 @@ export class BrokerController {
 
     return this.brokerService.createSession(userId, brokerAccountId, input);
   }
+
+  async getProfile(userId: string | undefined, brokerAccountId: string) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.brokerService.getProfile(userId, brokerAccountId);
+  }
+
+  async getFunds(userId: string | undefined, brokerAccountId: string) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.brokerService.getFunds(userId, brokerAccountId);
+  }
+
+  async getHoldings(userId: string | undefined, brokerAccountId: string) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.brokerService.getHoldings(userId, brokerAccountId);
+  }
+
+  async getPositions(userId: string | undefined, brokerAccountId: string) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.brokerService.getPositions(userId, brokerAccountId);
+  }
 }

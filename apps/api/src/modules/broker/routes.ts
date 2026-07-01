@@ -54,4 +54,52 @@ export async function brokerRoutes(app: FastifyInstance) {
       return brokerController.createSession(request.user?.id, params.id, body);
     },
   );
+
+  app.get(
+    "/broker/:id/profile",
+    {
+      preHandler: [app.authenticate],
+    },
+    async (request) => {
+      const params = request.params as { id: string };
+
+      return brokerController.getProfile(request.user?.id, params.id);
+    },
+  );
+
+  app.get(
+    "/broker/:id/funds",
+    {
+      preHandler: [app.authenticate],
+    },
+    async (request) => {
+      const params = request.params as { id: string };
+
+      return brokerController.getFunds(request.user?.id, params.id);
+    },
+  );
+
+  app.get(
+    "/broker/:id/holdings",
+    {
+      preHandler: [app.authenticate],
+    },
+    async (request) => {
+      const params = request.params as { id: string };
+
+      return brokerController.getHoldings(request.user?.id, params.id);
+    },
+  );
+
+  app.get(
+    "/broker/:id/positions",
+    {
+      preHandler: [app.authenticate],
+    },
+    async (request) => {
+      const params = request.params as { id: string };
+
+      return brokerController.getPositions(request.user?.id, params.id);
+    },
+  );
 }

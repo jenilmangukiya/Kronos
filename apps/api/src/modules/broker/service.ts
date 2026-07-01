@@ -182,4 +182,141 @@ export class BrokerService {
     });
     return updatedBrokerAccount;
   }
+
+  async getProfile(userId: string, brokerAccountId: string) {
+    const brokerAccount = await this.getActiveBrokerAccount(
+      userId,
+      brokerAccountId,
+    );
+
+    if (brokerAccount.broker !== "ANGEL_ONE") {
+      throw new AppError(
+        "Broker is not supported",
+        400,
+        "BROKER_NOT_SUPPORTED",
+      );
+    }
+
+    const angelClient = new AngelClient();
+
+    const response = await angelClient.getProfile({
+      apiKey: brokerAccount.apiKey!,
+      accessToken: brokerAccount.accessToken!,
+    });
+
+    return response.data;
+  }
+
+  async getFunds(userId: string, brokerAccountId: string) {
+    const brokerAccount = await this.getActiveBrokerAccount(
+      userId,
+      brokerAccountId,
+    );
+
+    if (brokerAccount.broker !== "ANGEL_ONE") {
+      throw new AppError(
+        "Broker is not supported",
+        400,
+        "BROKER_NOT_SUPPORTED",
+      );
+    }
+
+    const angelClient = new AngelClient();
+
+    const response = await angelClient.getFunds({
+      apiKey: brokerAccount.apiKey!,
+      accessToken: brokerAccount.accessToken!,
+    });
+
+    return response.data;
+  }
+
+  async getHoldings(userId: string, brokerAccountId: string) {
+    const brokerAccount = await this.getActiveBrokerAccount(
+      userId,
+      brokerAccountId,
+    );
+
+    if (brokerAccount.broker !== "ANGEL_ONE") {
+      throw new AppError(
+        "Broker is not supported",
+        400,
+        "BROKER_NOT_SUPPORTED",
+      );
+    }
+
+    const angelClient = new AngelClient();
+
+    const response = await angelClient.getHoldings({
+      apiKey: brokerAccount.apiKey!,
+      accessToken: brokerAccount.accessToken!,
+    });
+
+    return response.data;
+  }
+
+  async getPositions(userId: string, brokerAccountId: string) {
+    const brokerAccount = await this.getActiveBrokerAccount(
+      userId,
+      brokerAccountId,
+    );
+
+    if (brokerAccount.broker !== "ANGEL_ONE") {
+      throw new AppError(
+        "Broker is not supported",
+        400,
+        "BROKER_NOT_SUPPORTED",
+      );
+    }
+
+    const angelClient = new AngelClient();
+
+    const response = await angelClient.getPositions({
+      apiKey: brokerAccount.apiKey!,
+      accessToken: brokerAccount.accessToken!,
+    });
+
+    return response.data;
+  }
+
+  private async getActiveBrokerAccount(
+    userId: string,
+    brokerAccountId: string,
+  ) {
+    const brokerAccount = await this.db.brokerAccount.findFirst({
+      where: {
+        id: brokerAccountId,
+        userId,
+      },
+    });
+
+    if (!brokerAccount) {
+      throw new AppError(
+        "Broker account not found",
+        404,
+        "BROKER_ACCOUNT_NOT_FOUND",
+      );
+    }
+
+    if (!brokerAccount.apiKey || !brokerAccount.accessToken) {
+      throw new AppError(
+        "Broker session is missing",
+        400,
+        "BROKER_SESSION_MISSING",
+      );
+    }
+
+    if (
+      !brokerAccount.tokenExpiresAt ||
+      brokerAccount.tokenExpiresAt <= new Date()
+    ) {
+      throw new AppError(
+        "Broker session expired",
+        401,
+        "BROKER_SESSION_EXPIRED",
+      );
+    }
+
+    return brokerAccount;
+  }
 }

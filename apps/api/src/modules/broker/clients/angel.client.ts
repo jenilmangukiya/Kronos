@@ -43,6 +43,40 @@ export class AngelClient implements BrokerClient {
     return "ANGEL_ONE";
   }
 
+  async getProfile(params: { apiKey: string; accessToken: string }) {
+    return this.http.get("/rest/secure/angelbroking/user/v1/getProfile", {
+      headers: this.getAuthHeaders(params),
+    });
+  }
+
+  async getFunds(params: { apiKey: string; accessToken: string }) {
+    return this.http.get("/rest/secure/angelbroking/user/v1/getRMS", {
+      headers: this.getAuthHeaders(params),
+    });
+  }
+
+  async getHoldings(params: { apiKey: string; accessToken: string }) {
+    return this.http.get("/rest/secure/angelbroking/portfolio/v1/getHolding", {
+      headers: this.getAuthHeaders(params),
+    });
+  }
+
+  async getPositions(params: { apiKey: string; accessToken: string }) {
+    return this.http.get("/rest/secure/angelbroking/order/v1/getPosition", {
+      headers: this.getAuthHeaders(params),
+    });
+  }
+
+  private getAuthHeaders(params: { apiKey: string; accessToken: string }) {
+    return {
+      Authorization: `Bearer ${params.accessToken}`,
+      "X-PrivateKey": params.apiKey,
+      "X-ClientLocalIP": "127.0.0.1",
+      "X-ClientPublicIP": "127.0.0.1",
+      "X-MACAddress": "00:00:00:00:00:00",
+    };
+  }
+
   async createSession(params: {
     clientId: string;
     apiKey: string;

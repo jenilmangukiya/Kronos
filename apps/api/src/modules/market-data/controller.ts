@@ -4,6 +4,7 @@ import type {
   CandlesQuery,
   InstrumentSearchQuery,
   LtpQuery,
+  OptionExpiriesQuery,
   QuoteQuery,
 } from "./types.js";
 
@@ -51,5 +52,16 @@ export class MarketDataController {
     }
 
     return this.marketDataService.refreshInstruments();
+  }
+
+  async getOptionExpiries(
+    userId: string | undefined,
+    query: OptionExpiriesQuery,
+  ) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.marketDataService.getOptionExpiries(query);
   }
 }

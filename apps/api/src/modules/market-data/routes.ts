@@ -8,6 +8,7 @@ import {
   candlesQuerySchema,
   instrumentSearchQuerySchema,
   ltpQuerySchema,
+  optionExpiriesQuerySchema,
   quoteQuerySchema,
 } from "./schemas.js";
 
@@ -111,6 +112,28 @@ export async function marketDataRoutes(app: FastifyInstance) {
     },
     async (request) => {
       return marketDataController.refreshInstruments(request.user?.id);
+    },
+  );
+
+  typedApp.get(
+    "/market-data/option-expiries",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Get option expiries",
+        security: [{ bearerAuth: [] }],
+        querystring: optionExpiriesQuerySchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return marketDataController.getOptionExpiries(
+        request.user?.id,
+        request.query,
+      );
     },
   );
 }

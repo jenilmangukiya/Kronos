@@ -48,3 +48,9 @@ export interface AngelInstrument {
   exch_seg: string;
   tick_size: string;
 }
+
+export interface OptionExpiriesQuery {
+  symbol: string;
+  exchange?: string;
+  instrumentType?: string;
+}

@@ -6,6 +6,7 @@ import type {
   CandlesQuery,
   InstrumentSearchQuery,
   LtpQuery,
+  OptionExpiriesQuery,
   QuoteQuery,
 } from "./types.js";
 import { AngelInstrumentProvider } from "./providers/angel-instrument.provider.js";
@@ -66,6 +67,10 @@ export class MarketDataService {
 
   async refreshInstruments() {
     return angelInstrumentProvider.refresh();
+  }
+
+  async getOptionExpiries(query: OptionExpiriesQuery) {
+    return angelInstrumentProvider.getOptionExpiries(query);
   }
 
   private async getActiveAngelBrokerAccount(

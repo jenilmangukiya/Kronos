@@ -46,6 +46,58 @@ export class AngelInstrumentProvider {
     };
   }
 
+  async getOptionExpiries(query: {
+    symbol: string;
+    exchange?: string;
+    instrumentType?: string;
+  }) {
+    const instruments = await this.getInstruments();
+
+    const symbol = query.symbol.toUpperCase();
+    const exchange = query.exchange ?? "NFO";
+    const instrumentType = query.instrumentType ?? "OPTIDX";
+
+    const expiries = instruments
+      .filter((instrument) => {
+        return (
+          instrument.name.toUpperCase() === symbol &&
+          instrument.exch_seg === exchange &&
+          instrument.instrumenttype === instrumentType &&
+          instrument.expiry
+        );
+      })
+      .map((instrument) => instrument.expiry);
+
+    return [...new Set(expiries)].sort((a, b) => {
+      return (
+        this.parseAngelExpiry(a).getTime() - this.parseAngelExpiry(b).getTime()
+      );
+    });
+  }
+
+  private parseAngelExpiry(expiry: string) {
+    const day = Number(expiry.slice(0, 2));
+    const monthText = expiry.slice(2, 5).toUpperCase();
+    const year = Number(expiry.slice(5));
+
+    const monthMap: Record<string, number> = {
+      JAN: 0,
+      FEB: 1,
+      MAR: 2,
+      APR: 3,
+      MAY: 4,
+      JUN: 5,
+      JUL: 6,
+      AUG: 7,
+      SEP: 8,
+      OCT: 9,
+      NOV: 10,
+      DEC: 11,
+    };
+
+    return new Date(year, monthMap[monthText], day);
+  }
+
   private async getInstruments() {
     if (!this.instruments) {
       this.instruments = await this.downloadInstruments();

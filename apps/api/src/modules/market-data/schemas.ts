@@ -48,3 +48,13 @@ export const instrumentSearchQuerySchema = z.object({
 export type InstrumentSearchQueryInput = z.infer<
   typeof instrumentSearchQuerySchema
 >;
+
+export const optionExpiriesQuerySchema = z.object({
+  symbol: z.string().min(1),
+  exchange: z.string().default("NFO"),
+  instrumentType: z.string().default("OPTIDX"),
+});
+
+export type OptionExpiriesQueryInput = z.infer<
+  typeof optionExpiriesQuerySchema
+>;

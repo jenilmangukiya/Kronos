@@ -1,5 +1,5 @@
 import { AppError } from "../../errors/app-error.js";
-import type { ConnectBrokerInput } from "./types.js";
+import type { ConnectBrokerInput, CreateBrokerSessionInput } from "./types.js";
 import { BrokerService } from "./service.js";
 
 export class BrokerController {
@@ -27,5 +27,17 @@ export class BrokerController {
     }
 
     return this.brokerService.disconnect(userId, brokerAccountId);
+  }
+
+  async createSession(
+    userId: string | undefined,
+    brokerAccountId: string,
+    input: CreateBrokerSessionInput,
+  ) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.brokerService.createSession(userId, brokerAccountId, input);
   }
 }

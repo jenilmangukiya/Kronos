@@ -26,6 +26,15 @@ export const config = {
       refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
     },
   },
+
+  kotak: {
+    loginBaseUrl: env.KOTAK_LOGIN_BASE_URL,
+  },
+
+  angel: {
+    baseUrl: env.ANGEL_BASE_URL,
+    wsUrl: env.ANGEL_WS_URL,
+  },
 } as const;
 
 export type Config = typeof config;

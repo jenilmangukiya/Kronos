@@ -1,13 +1,16 @@
 import type { FastifyInstance } from "fastify";
 
 import { AppError } from "../../errors/app-error.js";
-import type { ConnectBrokerInput } from "./types.js";
+import type { ConnectBrokerInput, CreateBrokerSessionInput } from "./types.js";
+
+import { AngelClient } from "./clients/angel.client.js";
+import { KotakClient } from "./clients/kotak.client.js";
 
 export class BrokerService {
   constructor(private readonly db: FastifyInstance["db"]) {}
 
   async connect(userId: string, input: ConnectBrokerInput) {
-    if (input.broker !== "KOTAK") {
+    if (!["KOTAK", "ANGEL_ONE"].includes(input.broker)) {
       throw new AppError(
         "Broker is not supported",
         400,
@@ -36,6 +39,7 @@ export class BrokerService {
         userId,
         broker: input.broker,
         clientId: input.clientId,
+        apiKey: input.apiKey,
       },
       select: {
         id: true,
@@ -47,6 +51,7 @@ export class BrokerService {
 
     return brokerAccount;
   }
+
   async getMyBrokers(userId: string) {
     return this.db.brokerAccount.findMany({
       where: {
@@ -90,5 +95,91 @@ export class BrokerService {
     return {
       success: true,
     };
+  }
+
+  async createSession(
+    userId: string,
+    brokerAccountId: string,
+    input: CreateBrokerSessionInput,
+  ) {
+    const brokerAccount = await this.db.brokerAccount.findFirst({
+      where: {
+        id: brokerAccountId,
+        userId,
+      },
+    });
+
+    if (!brokerAccount) {
+      throw new AppError(
+        "Broker account not found",
+        404,
+        "BROKER_ACCOUNT_NOT_FOUND",
+      );
+    }
+
+    if (!["KOTAK", "ANGEL_ONE"].includes(brokerAccount.broker)) {
+      throw new AppError(
+        "Broker is not supported",
+        400,
+        "BROKER_NOT_SUPPORTED",
+      );
+    }
+
+    if (!brokerAccount.apiKey) {
+      throw new AppError(
+        "Broker API access token is missing",
+        400,
+        "BROKER_API_ACCESS_TOKEN_MISSING",
+      );
+    }
+    let brokerClient;
+
+    if (brokerAccount.broker === "ANGEL_ONE") {
+      brokerClient = new AngelClient();
+    } else if (brokerAccount.broker === "KOTAK") {
+      brokerClient = new KotakClient();
+    } else {
+      throw new AppError(
+        "Broker is not supported",
+        400,
+        "BROKER_NOT_SUPPORTED",
+      );
+    }
+
+    if (!brokerAccount.apiKey) {
+      throw new AppError(
+        "Broker API key is missing",
+        400,
+        "BROKER_API_KEY_MISSING",
+      );
+    }
+
+    const session = await brokerClient.createSession({
+      clientId: brokerAccount.clientId,
+      apiKey: brokerAccount.apiKey,
+      input,
+    });
+
+    const updatedBrokerAccount = await this.db.brokerAccount.update({
+      where: {
+        id: brokerAccount.id,
+      },
+      data: {
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+        feedToken: session.feedToken,
+        sessionSid: session.sessionSid,
+        sessionBaseUrl: session.sessionBaseUrl,
+        tokenExpiresAt: session.tokenExpiresAt,
+      },
+      select: {
+        id: true,
+        broker: true,
+        clientId: true,
+        tokenExpiresAt: true,
+        updatedAt: true,
+      },
+    });
+    return updatedBrokerAccount;
   }
 }

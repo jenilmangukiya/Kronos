@@ -19,6 +19,11 @@ export const envSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: z.custom<StringValue>(),
 
   JWT_REFRESH_EXPIRES_IN: z.custom<StringValue>(),
+
+  KOTAK_LOGIN_BASE_URL: z.url(),
+
+  ANGEL_BASE_URL: z.string().url(),
+  ANGEL_WS_URL: z.string().url(),
 });
 
 export type Env = z.infer<typeof envSchema>;

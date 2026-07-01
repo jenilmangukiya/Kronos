@@ -41,7 +41,15 @@ model BrokerAccount {
   broker   String
   clientId String @map("client_id")
 
-  accessToken    String?   @map("access_token")
+  apiKey String? @map("api_key")
+
+  accessToken  String? @map("access_token")
+  refreshToken String? @map("refresh_token")
+  feedToken    String? @map("feed_token")
+
+  sessionSid     String? @map("session_sid")
+  sessionBaseUrl String? @map("session_base_url")
+
   tokenExpiresAt DateTime? @map("token_expires_at")
 
   userId String @map("user_id")

@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 
 import { BrokerController } from "./controller.js";
 import { BrokerService } from "./service.js";
-import type { ConnectBrokerInput } from "./types.js";
+import type { ConnectBrokerInput, CreateBrokerSessionInput } from "./types.js";
 
 export async function brokerRoutes(app: FastifyInstance) {
   const brokerService = new BrokerService(app.db);
@@ -39,6 +39,19 @@ export async function brokerRoutes(app: FastifyInstance) {
       const params = request.params as { id: string };
 
       return brokerController.disconnect(request.user?.id, params.id);
+    },
+  );
+
+  app.post(
+    "/broker/:id/session",
+    {
+      preHandler: [app.authenticate],
+    },
+    async (request) => {
+      const params = request.params as { id: string };
+      const body = request.body as CreateBrokerSessionInput;
+
+      return brokerController.createSession(request.user?.id, params.id, body);
     },
   );
 }

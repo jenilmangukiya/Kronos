@@ -37,3 +37,14 @@ export const anyResponseSchema = z.any();
 export type LtpQueryInput = z.infer<typeof ltpQuerySchema>;
 export type QuoteQueryInput = z.infer<typeof quoteQuerySchema>;
 export type CandlesQueryInput = z.infer<typeof candlesQuerySchema>;
+
+export const instrumentSearchQuerySchema = z.object({
+  query: z.string().min(1),
+  exchange: z.string().optional(),
+  instrumentType: z.string().optional(),
+  limit: z.coerce.number().min(1).max(100).default(25),
+});
+
+export type InstrumentSearchQueryInput = z.infer<
+  typeof instrumentSearchQuerySchema
+>;

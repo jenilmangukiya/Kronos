@@ -34,6 +34,7 @@ export const config = {
   angel: {
     baseUrl: env.ANGEL_BASE_URL,
     wsUrl: env.ANGEL_WS_URL,
+    instrumentMasterUrl: env.ANGEL_INSTRUMENT_MASTER_URL,
   },
 } as const;
 

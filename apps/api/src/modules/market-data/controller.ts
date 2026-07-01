@@ -1,6 +1,11 @@
 import { AppError } from "../../errors/app-error.js";
 import { MarketDataService } from "./service.js";
-import type { CandlesQuery, LtpQuery, QuoteQuery } from "./types.js";
+import type {
+  CandlesQuery,
+  InstrumentSearchQuery,
+  LtpQuery,
+  QuoteQuery,
+} from "./types.js";
 
 export class MarketDataController {
   constructor(private readonly marketDataService: MarketDataService) {}
@@ -27,5 +32,24 @@ export class MarketDataController {
     }
 
     return this.marketDataService.getCandles(userId, query);
+  }
+
+  async searchInstruments(
+    userId: string | undefined,
+    query: InstrumentSearchQuery,
+  ) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.marketDataService.searchInstruments(query);
+  }
+
+  async refreshInstruments(userId: string | undefined) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.marketDataService.refreshInstruments();
   }
 }

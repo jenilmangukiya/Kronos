@@ -2,7 +2,15 @@ import type { FastifyInstance } from "fastify";
 
 import { AppError } from "../../errors/app-error.js";
 import { AngelMarketDataProvider } from "./providers/angel.provider.js";
-import type { CandlesQuery, LtpQuery, QuoteQuery } from "./types.js";
+import type {
+  CandlesQuery,
+  InstrumentSearchQuery,
+  LtpQuery,
+  QuoteQuery,
+} from "./types.js";
+import { AngelInstrumentProvider } from "./providers/angel-instrument.provider.js";
+
+const angelInstrumentProvider = new AngelInstrumentProvider();
 
 export class MarketDataService {
   constructor(private readonly db: FastifyInstance["db"]) {}
@@ -50,6 +58,14 @@ export class MarketDataService {
       accessToken: brokerAccount.accessToken!,
       query,
     });
+  }
+
+  async searchInstruments(query: InstrumentSearchQuery) {
+    return angelInstrumentProvider.search(query);
+  }
+
+  async refreshInstruments() {
+    return angelInstrumentProvider.refresh();
   }
 
   private async getActiveAngelBrokerAccount(

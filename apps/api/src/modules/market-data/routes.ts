@@ -6,6 +6,7 @@ import { MarketDataService } from "./service.js";
 import {
   anyResponseSchema,
   candlesQuerySchema,
+  instrumentSearchQuerySchema,
   ltpQuerySchema,
   quoteQuerySchema,
 } from "./schemas.js";
@@ -70,6 +71,46 @@ export async function marketDataRoutes(app: FastifyInstance) {
     },
     async (request) => {
       return marketDataController.getCandles(request.user?.id, request.query);
+    },
+  );
+
+  typedApp.get(
+    "/market-data/instruments/search",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Search Angel instruments",
+        security: [{ bearerAuth: [] }],
+        querystring: instrumentSearchQuerySchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return marketDataController.searchInstruments(
+        request.user?.id,
+        request.query,
+      );
+    },
+  );
+
+  typedApp.post(
+    "/market-data/instruments/refresh",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Refresh Angel instrument master cache",
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return marketDataController.refreshInstruments(request.user?.id);
     },
   );
 }

@@ -22,8 +22,9 @@ export const envSchema = z.object({
 
   KOTAK_LOGIN_BASE_URL: z.url(),
 
-  ANGEL_BASE_URL: z.string().url(),
-  ANGEL_WS_URL: z.string().url(),
+  ANGEL_BASE_URL: z.url(),
+  ANGEL_WS_URL: z.url(),
+  ANGEL_INSTRUMENT_MASTER_URL: z.url(),
 });
 
 export type Env = z.infer<typeof envSchema>;

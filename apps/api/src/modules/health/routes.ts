@@ -1,31 +1,27 @@
 import { FastifyInstance } from "fastify";
+import { ZodTypeProvider } from "fastify-type-provider-zod";
 
 import { healthController } from "./controller.js";
+import { healthResponseSchema } from "./schemas.js";
 
 export async function healthRoutes(app: FastifyInstance) {
-  app.get(
+  const typedApp = app.withTypeProvider<ZodTypeProvider>();
+
+  typedApp.get(
     "/health",
     {
       schema: {
         tags: ["Health"],
         summary: "Health check",
         response: {
-          200: {
-            type: "object",
-            properties: {
-              status: { type: "string" },
-              service: { type: "string" },
-              environment: { type: "string" },
-              timestamp: { type: "string" },
-            },
-          },
+          200: healthResponseSchema,
         },
       },
     },
     healthController,
   );
 
-  app.get("/error", async () => {
+  typedApp.get("/error", async () => {
     throw new Error("Testing Error Handler");
   });
 }

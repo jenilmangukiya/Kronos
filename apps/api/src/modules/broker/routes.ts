@@ -1,105 +1,180 @@
 import type { FastifyInstance } from "fastify";
+import { ZodTypeProvider } from "fastify-type-provider-zod";
 
 import { BrokerController } from "./controller.js";
 import { BrokerService } from "./service.js";
-import type { ConnectBrokerInput, CreateBrokerSessionInput } from "./types.js";
+import {
+  connectBrokerBodySchema,
+  connectBrokerResponseSchema,
+  getMyBrokersResponseSchema,
+  brokerIdParamSchema,
+  disconnectResponseSchema,
+  createBrokerSessionBodySchema,
+  createBrokerSessionResponseSchema,
+  getProfileResponseSchema,
+  getFundsResponseSchema,
+  getHoldingsResponseSchema,
+  getPositionsResponseSchema,
+} from "./schemas.js";
 
 export async function brokerRoutes(app: FastifyInstance) {
   const brokerService = new BrokerService(app.db);
   const brokerController = new BrokerController(brokerService);
+  const typedApp = app.withTypeProvider<ZodTypeProvider>();
 
-  app.post(
+  typedApp.post(
     "/broker/connect",
     {
       preHandler: [app.authenticate],
+      schema: {
+        tags: ["Broker"],
+        summary: "Connect a broker account",
+        security: [{ bearerAuth: [] }],
+        body: connectBrokerBodySchema,
+        response: {
+          200: connectBrokerResponseSchema,
+        },
+      },
     },
     async (request) => {
-      const body = request.body as ConnectBrokerInput;
-
-      return brokerController.connect(request.user?.id, body);
+      return brokerController.connect(request.user?.id, request.body);
     },
   );
 
-  app.get(
+  typedApp.get(
     "/broker",
     {
       preHandler: [app.authenticate],
+      schema: {
+        tags: ["Broker"],
+        summary: "Get connected broker accounts",
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: getMyBrokersResponseSchema,
+        },
+      },
     },
     async (request) => {
       return brokerController.getMyBrokers(request.user?.id);
     },
   );
 
-  app.delete(
+  typedApp.delete(
     "/broker/:id",
     {
       preHandler: [app.authenticate],
+      schema: {
+        tags: ["Broker"],
+        summary: "Disconnect a broker account",
+        security: [{ bearerAuth: [] }],
+        params: brokerIdParamSchema,
+        response: {
+          200: disconnectResponseSchema,
+        },
+      },
     },
     async (request) => {
-      const params = request.params as { id: string };
-
-      return brokerController.disconnect(request.user?.id, params.id);
+      return brokerController.disconnect(request.user?.id, request.params.id);
     },
   );
 
-  app.post(
+  typedApp.post(
     "/broker/:id/session",
     {
       preHandler: [app.authenticate],
+      schema: {
+        tags: ["Broker"],
+        summary: "Create a session for a broker account",
+        security: [{ bearerAuth: [] }],
+        params: brokerIdParamSchema,
+        body: createBrokerSessionBodySchema,
+        response: {
+          200: createBrokerSessionResponseSchema,
+        },
+      },
     },
     async (request) => {
-      const params = request.params as { id: string };
-      const body = request.body as CreateBrokerSessionInput;
-
-      return brokerController.createSession(request.user?.id, params.id, body);
+      return brokerController.createSession(
+        request.user?.id,
+        request.params.id,
+        request.body,
+      );
     },
   );
 
-  app.get(
+  typedApp.get(
     "/broker/:id/profile",
     {
       preHandler: [app.authenticate],
+      schema: {
+        tags: ["Broker"],
+        summary: "Get broker account profile details",
+        security: [{ bearerAuth: [] }],
+        params: brokerIdParamSchema,
+        response: {
+          200: getProfileResponseSchema,
+        },
+      },
     },
     async (request) => {
-      const params = request.params as { id: string };
-
-      return brokerController.getProfile(request.user?.id, params.id);
+      return brokerController.getProfile(request.user?.id, request.params.id);
     },
   );
 
-  app.get(
+  typedApp.get(
     "/broker/:id/funds",
     {
       preHandler: [app.authenticate],
+      schema: {
+        tags: ["Broker"],
+        summary: "Get broker account funds and limits",
+        security: [{ bearerAuth: [] }],
+        params: brokerIdParamSchema,
+        response: {
+          200: getFundsResponseSchema,
+        },
+      },
     },
     async (request) => {
-      const params = request.params as { id: string };
-
-      return brokerController.getFunds(request.user?.id, params.id);
+      return brokerController.getFunds(request.user?.id, request.params.id);
     },
   );
 
-  app.get(
+  typedApp.get(
     "/broker/:id/holdings",
     {
       preHandler: [app.authenticate],
+      schema: {
+        tags: ["Broker"],
+        summary: "Get broker account stock holdings",
+        security: [{ bearerAuth: [] }],
+        params: brokerIdParamSchema,
+        response: {
+          200: getHoldingsResponseSchema,
+        },
+      },
     },
     async (request) => {
-      const params = request.params as { id: string };
-
-      return brokerController.getHoldings(request.user?.id, params.id);
+      return brokerController.getHoldings(request.user?.id, request.params.id);
     },
   );
 
-  app.get(
+  typedApp.get(
     "/broker/:id/positions",
     {
       preHandler: [app.authenticate],
+      schema: {
+        tags: ["Broker"],
+        summary: "Get broker account active positions",
+        security: [{ bearerAuth: [] }],
+        params: brokerIdParamSchema,
+        response: {
+          200: getPositionsResponseSchema,
+        },
+      },
     },
     async (request) => {
-      const params = request.params as { id: string };
-
-      return brokerController.getPositions(request.user?.id, params.id);
+      return brokerController.getPositions(request.user?.id, request.params.id);
     },
   );
 }

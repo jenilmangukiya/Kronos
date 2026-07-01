@@ -1,18 +1,15 @@
-export type BrokerName = "KOTAK" | "ANGEL_ONE";
+import { z } from "zod";
+import {
+  brokerNameSchema,
+  connectBrokerBodySchema,
+  createBrokerSessionBodySchema,
+} from "./schemas.js";
 
-export interface ConnectBrokerInput {
-  broker: BrokerName;
-  clientId: string;
-  apiKey: string;
-}
+export type BrokerName = z.infer<typeof brokerNameSchema>;
 
-export interface CreateBrokerSessionInput {
-  mpin: string;
-  totp: string;
+export type ConnectBrokerInput = z.infer<typeof connectBrokerBodySchema>;
 
-  // Needed only for Kotak. Angel does not need mobileNumber.
-  mobileNumber?: string;
-}
+export type CreateBrokerSessionInput = z.infer<typeof createBrokerSessionBodySchema>;
 
 export interface BrokerSessionResult {
   accessToken: string;

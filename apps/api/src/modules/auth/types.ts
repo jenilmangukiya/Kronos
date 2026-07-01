@@ -1,13 +1,9 @@
-export interface RegisterInput {
-  name?: string;
-  email: string;
-  password: string;
-}
+import { z } from "zod";
+import { registerBodySchema, loginBodySchema, refreshBodySchema } from "./schemas.js";
 
-export interface LoginInput {
-  email: string;
-  password: string;
-}
+export type RegisterInput = z.infer<typeof registerBodySchema>;
+export type LoginInput = z.infer<typeof loginBodySchema>;
+export type RefreshInput = z.infer<typeof refreshBodySchema>;
 
 export interface AuthResponse {
   accessToken: string;
@@ -18,8 +14,4 @@ export interface AuthResponse {
     email: string;
     name: string | null;
   };
-}
-
-export interface RefreshInput {
-  refreshToken: string;
 }

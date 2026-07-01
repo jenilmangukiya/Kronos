@@ -1,6 +1,7 @@
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import fp from "fastify-plugin";
+import { jsonSchemaTransform } from "fastify-type-provider-zod";
 
 export default fp(async (app) => {
   await app.register(swagger, {
@@ -40,6 +41,7 @@ export default fp(async (app) => {
         },
       ],
     },
+    transform: jsonSchemaTransform,
   });
 
   await app.register(swaggerUi, {
@@ -47,6 +49,7 @@ export default fp(async (app) => {
     uiConfig: {
       docExpansion: "list",
       deepLinking: true,
+      persistAuthorization: true,
     },
   });
 });

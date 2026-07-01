@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
 
 import { loggerOptions } from "@kronos/logger";
 import { registerModules } from "./modules";
@@ -9,6 +10,9 @@ export async function buildApp() {
   const app = Fastify({
     logger: loggerOptions,
   });
+
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
 
   setupApp(app);
 

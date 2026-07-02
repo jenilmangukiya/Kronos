@@ -100,6 +100,37 @@ export class AngelMarketDataProvider {
     }
   }
 
+  async getQuoteForTokens(params: {
+    apiKey: string;
+    accessToken: string;
+    exchange: string;
+    tokens: string[];
+    mode?: "LTP" | "OHLC" | "FULL";
+  }) {
+    try {
+      const response = await this.http.post(
+        "/rest/secure/angelbroking/market/v1/quote",
+        {
+          mode: params.mode ?? "FULL",
+          exchangeTokens: {
+            [params.exchange]: params.tokens,
+          },
+        },
+        {
+          headers: this.getAuthHeaders(params),
+        },
+      );
+
+      return response.data;
+    } catch (error) {
+      throw this.toAppError(
+        error,
+        "Failed to fetch quotes",
+        "ANGEL_QUOTES_FAILED",
+      );
+    }
+  }
+
   private getAuthHeaders(params: { apiKey: string; accessToken: string }) {
     return {
       Authorization: `Bearer ${params.accessToken}`,

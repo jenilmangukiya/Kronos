@@ -8,6 +8,7 @@ import {
   candlesQuerySchema,
   instrumentSearchQuerySchema,
   ltpQuerySchema,
+  optionChainQuerySchema,
   optionExpiriesQuerySchema,
   quoteQuerySchema,
 } from "./schemas.js";
@@ -131,6 +132,28 @@ export async function marketDataRoutes(app: FastifyInstance) {
     },
     async (request) => {
       return marketDataController.getOptionExpiries(
+        request.user?.id,
+        request.query,
+      );
+    },
+  );
+
+  typedApp.get(
+    "/market-data/option-chain",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Get option chain",
+        security: [{ bearerAuth: [] }],
+        querystring: optionChainQuerySchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return marketDataController.getOptionChain(
         request.user?.id,
         request.query,
       );

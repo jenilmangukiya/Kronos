@@ -75,6 +75,68 @@ export class AngelInstrumentProvider {
     });
   }
 
+  async getOptionContracts(query: {
+    symbol: string;
+    expiry: string;
+    exchange?: string;
+    instrumentType?: string;
+  }) {
+    const instruments = await this.getInstruments();
+
+    const symbol = query.symbol.toUpperCase();
+    const exchange = query.exchange ?? "NFO";
+    const instrumentType = query.instrumentType ?? "OPTIDX";
+
+    return instruments
+      .filter((instrument) => {
+        return (
+          instrument.name.toUpperCase() === symbol &&
+          instrument.expiry === query.expiry &&
+          instrument.exch_seg === exchange &&
+          instrument.instrumenttype === instrumentType
+        );
+      })
+      .map((instrument) => {
+        const optionType = instrument.symbol.endsWith("CE") ? "CE" : "PE";
+
+        return {
+          token: instrument.token,
+          symbol: instrument.symbol,
+          strike: Number(instrument.strike) / 100,
+          optionType,
+        };
+      })
+      .filter((instrument) => {
+        return instrument.optionType === "CE" || instrument.optionType === "PE";
+      });
+  }
+
+  getIndexInstrument(symbol: string) {
+    const normalizedSymbol = symbol.toUpperCase();
+
+    const indexMap: Record<
+      string,
+      {
+        exchange: string;
+        tradingsymbol: string;
+        symboltoken: string;
+      }
+    > = {
+      NIFTY: {
+        exchange: "NSE",
+        tradingsymbol: "Nifty 50",
+        symboltoken: "99926000",
+      },
+      BANKNIFTY: {
+        exchange: "NSE",
+        tradingsymbol: "Nifty Bank",
+        symboltoken: "99926009",
+      },
+    };
+
+    return indexMap[normalizedSymbol];
+  }
+
   private parseAngelExpiry(expiry: string) {
     const day = Number(expiry.slice(0, 2));
     const monthText = expiry.slice(2, 5).toUpperCase();

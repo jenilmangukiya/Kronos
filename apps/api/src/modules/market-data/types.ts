@@ -54,3 +54,17 @@ export interface OptionExpiriesQuery {
   exchange?: string;
   instrumentType?: string;
 }
+
+export interface OptionChainQuery {
+  brokerAccountId: string;
+  symbol: string;
+  expiry: string;
+  strikeRange?: number;
+}
+
+export interface OptionChainInstrument {
+  token: string;
+  symbol: string;
+  strike: number;
+  optionType: "CE" | "PE";
+}

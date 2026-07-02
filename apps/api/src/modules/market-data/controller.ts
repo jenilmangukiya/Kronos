@@ -4,6 +4,7 @@ import type {
   CandlesQuery,
   InstrumentSearchQuery,
   LtpQuery,
+  OptionChainQuery,
   OptionExpiriesQuery,
   QuoteQuery,
 } from "./types.js";
@@ -63,5 +64,13 @@ export class MarketDataController {
     }
 
     return this.marketDataService.getOptionExpiries(query);
+  }
+
+  async getOptionChain(userId: string | undefined, query: OptionChainQuery) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.marketDataService.getOptionChain(userId, query);
   }
 }

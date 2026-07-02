@@ -68,3 +68,9 @@ export interface OptionChainInstrument {
   strike: number;
   optionType: "CE" | "PE";
 }
+
+export interface OptionGreeksQuery {
+  brokerAccountId: string;
+  symbol: string;
+  expiry: string;
+}

@@ -131,6 +131,34 @@ export class AngelMarketDataProvider {
     }
   }
 
+  async getOptionGreeks(params: {
+    apiKey: string;
+    accessToken: string;
+    symbol: string;
+    expiry: string;
+  }) {
+    try {
+      const response = await this.http.post(
+        "/rest/secure/angelbroking/marketData/v1/optionGreek",
+        {
+          name: params.symbol.toUpperCase(),
+          expirydate: params.expiry,
+        },
+        {
+          headers: this.getAuthHeaders(params),
+        },
+      );
+
+      return response.data;
+    } catch (error) {
+      throw this.toAppError(
+        error,
+        "Failed to fetch option Greeks",
+        "ANGEL_OPTION_GREEKS_FAILED",
+      );
+    }
+  }
+
   private getAuthHeaders(params: { apiKey: string; accessToken: string }) {
     return {
       Authorization: `Bearer ${params.accessToken}`,

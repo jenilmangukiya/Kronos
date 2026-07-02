@@ -67,3 +67,11 @@ export const optionChainQuerySchema = z.object({
 });
 
 export type OptionChainQueryInput = z.infer<typeof optionChainQuerySchema>;
+
+export const optionGreeksQuerySchema = z.object({
+  brokerAccountId: z.string().min(1),
+  symbol: z.string().min(1),
+  expiry: z.string().min(1),
+});
+
+export type OptionGreeksQueryInput = z.infer<typeof optionGreeksQuerySchema>;

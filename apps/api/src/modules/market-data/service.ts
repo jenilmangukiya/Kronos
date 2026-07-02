@@ -8,6 +8,7 @@ import type {
   LtpQuery,
   OptionChainQuery,
   OptionExpiriesQuery,
+  OptionGreeksQuery,
   QuoteQuery,
 } from "./types.js";
 import { AngelInstrumentProvider } from "./providers/angel-instrument.provider.js";
@@ -161,6 +162,34 @@ export class MarketDataService {
       mode: "FULL",
     });
 
+    const greeksResponse = await marketDataProvider.getOptionGreeks({
+      apiKey: brokerAccount.apiKey!,
+      accessToken: brokerAccount.accessToken!,
+      symbol: query.symbol,
+      expiry: query.expiry,
+    });
+
+    const greeksData = greeksResponse?.data ?? [];
+
+    const greeksByStrikeAndType = new Map(
+      greeksData.map((greek: any) => {
+        const key = `${Number(greek.strikePrice)}-${greek.optionType}`;
+        const iv = Number(greek.impliedVolatility);
+
+        return [
+          key,
+          {
+            delta: greek.delta ? Number(greek.delta) : null,
+            gamma: greek.gamma ? Number(greek.gamma) : null,
+            theta: greek.theta ? Number(greek.theta) : null,
+            vega: greek.vega ? Number(greek.vega) : null,
+            iv: iv > 0 ? iv : null,
+            tradeVolume: greek.tradeVolume ? Number(greek.tradeVolume) : null,
+          },
+        ];
+      }),
+    );
+
     const fetchedQuotes = quoteResponse?.data?.fetched ?? [];
 
     const quoteByToken = new Map(
@@ -186,6 +215,9 @@ export class MarketDataService {
         ? quoteByToken.get(String(peContract.token))
         : null;
 
+      const ceGreeks: any = greeksByStrikeAndType.get(`${strike}-CE`);
+      const peGreeks: any = greeksByStrikeAndType.get(`${strike}-PE`);
+
       return {
         strike,
         ce: ceContract
@@ -197,6 +229,12 @@ export class MarketDataService {
               volume: ceQuote?.tradeVolume ?? null,
               bid: ceQuote?.depth?.buy?.[0]?.price ?? null,
               ask: ceQuote?.depth?.sell?.[0]?.price ?? null,
+
+              iv: ceGreeks?.iv ?? null,
+              delta: ceGreeks?.delta ?? null,
+              gamma: ceGreeks?.gamma ?? null,
+              theta: ceGreeks?.theta ?? null,
+              vega: ceGreeks?.vega ?? null,
             }
           : null,
         pe: peContract
@@ -208,6 +246,12 @@ export class MarketDataService {
               volume: peQuote?.tradeVolume ?? null,
               bid: peQuote?.depth?.buy?.[0]?.price ?? null,
               ask: peQuote?.depth?.sell?.[0]?.price ?? null,
+
+              iv: peGreeks?.iv ?? null,
+              delta: peGreeks?.delta ?? null,
+              gamma: peGreeks?.gamma ?? null,
+              theta: peGreeks?.theta ?? null,
+              vega: peGreeks?.vega ?? null,
             }
           : null,
       };
@@ -251,6 +295,22 @@ export class MarketDataService {
       },
       rows,
     };
+  }
+
+  async getOptionGreeks(userId: string, query: OptionGreeksQuery) {
+    const brokerAccount = await this.getActiveAngelBrokerAccount(
+      userId,
+      query.brokerAccountId,
+    );
+
+    const marketDataProvider = new AngelMarketDataProvider();
+
+    return marketDataProvider.getOptionGreeks({
+      apiKey: brokerAccount.apiKey!,
+      accessToken: brokerAccount.accessToken!,
+      symbol: query.symbol,
+      expiry: query.expiry,
+    });
   }
 
   private async getActiveAngelBrokerAccount(

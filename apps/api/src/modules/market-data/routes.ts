@@ -10,6 +10,7 @@ import {
   ltpQuerySchema,
   optionChainQuerySchema,
   optionExpiriesQuerySchema,
+  optionGreeksQuerySchema,
   quoteQuerySchema,
 } from "./schemas.js";
 
@@ -154,6 +155,28 @@ export async function marketDataRoutes(app: FastifyInstance) {
     },
     async (request) => {
       return marketDataController.getOptionChain(
+        request.user?.id,
+        request.query,
+      );
+    },
+  );
+
+  typedApp.get(
+    "/market-data/option-greeks",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Get option Greeks",
+        security: [{ bearerAuth: [] }],
+        querystring: optionGreeksQuerySchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return marketDataController.getOptionGreeks(
         request.user?.id,
         request.query,
       );

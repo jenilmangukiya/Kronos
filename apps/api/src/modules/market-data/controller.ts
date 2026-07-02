@@ -6,6 +6,7 @@ import type {
   LtpQuery,
   OptionChainQuery,
   OptionExpiriesQuery,
+  OptionGreeksQuery,
   QuoteQuery,
 } from "./types.js";
 
@@ -72,5 +73,13 @@ export class MarketDataController {
     }
 
     return this.marketDataService.getOptionChain(userId, query);
+  }
+
+  async getOptionGreeks(userId: string | undefined, query: OptionGreeksQuery) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.marketDataService.getOptionGreeks(userId, query);
   }
 }

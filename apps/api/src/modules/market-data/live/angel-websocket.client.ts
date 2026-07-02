@@ -7,6 +7,7 @@ import { liveTickStore } from "./live-tick.store.js";
 import type { AngelSubscribeToken } from "./types.js";
 
 interface AngelWebSocketClientParams {
+  brokerAccountId: string;
   apiKey: string;
   clientCode: string;
   accessToken: string;
@@ -51,9 +52,7 @@ export class AngelWebSocketClient {
       const tick = decodeAngelTick(buffer);
 
       if (tick) {
-        liveTickStore.setTick(tick);
-
-        // Keep this for testing. Later we can remove it.
+        liveTickStore.setTick(this.params.brokerAccountId, tick);
         console.log("[Angel WS] Tick:", tick);
       }
     });

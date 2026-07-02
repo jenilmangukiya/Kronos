@@ -81,6 +81,7 @@ export const liveStartQuerySchema = z.object({
 });
 
 export const liveSubscribeBodySchema = z.object({
+  brokerAccountId: z.string().min(1),
   tokens: z.array(
     z.object({
       exchangeType: z.union([
@@ -98,5 +99,19 @@ export const liveSubscribeBodySchema = z.object({
 });
 
 export const liveLatestQuerySchema = z.object({
+  brokerAccountId: z.string().min(1),
   token: z.string().min(1),
+});
+
+export const liveManyLatestQuerySchema = z.object({
+  brokerAccountId: z.string().min(1),
+  tokens: z.string().min(1),
+});
+
+export const liveStatusQuerySchema = z.object({
+  brokerAccountId: z.string().min(1),
+});
+
+export const liveStopQuerySchema = z.object({
+  brokerAccountId: z.string().min(1),
 });

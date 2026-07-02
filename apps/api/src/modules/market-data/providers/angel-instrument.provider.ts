@@ -157,7 +157,7 @@ export class AngelInstrumentProvider {
       DEC: 11,
     };
 
-    return new Date(year, monthMap[monthText], day);
+    return new Date(year, monthMap[monthText] ?? 0, day);
   }
 
   private async getInstruments() {

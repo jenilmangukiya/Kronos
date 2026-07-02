@@ -5,17 +5,29 @@ import { AngelWebSocketClient } from "./angel-websocket.client.js";
 import { liveTickStore } from "./live-tick.store.js";
 import type { AngelSubscribeToken } from "./types.js";
 
+interface LiveClientSession {
+  userId: string;
+  brokerAccountId: string;
+  client: AngelWebSocketClient;
+  subscribedTokens: Set<string>;
+  lastActivityAt: number;
+}
+
 class LiveMarketDataService {
-  private angelClient: AngelWebSocketClient | null = null;
-  private brokerAccountId: string | null = null;
-  private readonly subscribedTokens = new Set<string>();
+  private readonly sessions = new Map<string, LiveClientSession>();
+
+  private readonly inactiveTimeoutMs = 30 * 60 * 1000;
 
   async start(app: FastifyInstance, userId: string, brokerAccountId: string) {
-    if (this.angelClient?.isConnected()) {
+    const existingSession = this.sessions.get(brokerAccountId);
+
+    if (existingSession?.client.isConnected()) {
+      this.touch(brokerAccountId);
+
       return {
         success: true,
         message: "Angel WebSocket already connected",
-        brokerAccountId: this.brokerAccountId,
+        brokerAccountId,
       };
     }
 
@@ -65,94 +77,189 @@ class LiveMarketDataService {
       );
     }
 
-    this.angelClient = new AngelWebSocketClient({
+    const client = new AngelWebSocketClient({
+      brokerAccountId: brokerAccount.id,
       apiKey: brokerAccount.apiKey,
       clientCode: brokerAccount.clientId,
       accessToken: brokerAccount.accessToken,
       feedToken: brokerAccount.feedToken,
     });
 
-    this.brokerAccountId = brokerAccount.id;
-    this.angelClient.connect();
+    this.sessions.set(brokerAccountId, {
+      userId,
+      brokerAccountId,
+      client,
+      subscribedTokens: new Set<string>(),
+      lastActivityAt: Date.now(),
+    });
+
+    client.connect();
 
     return {
       success: true,
       message: "Angel WebSocket connecting",
-      brokerAccountId: brokerAccount.id,
+      brokerAccountId,
     };
   }
 
-  subscribe(tokens: AngelSubscribeToken[]) {
-    if (!this.angelClient?.isConnected()) {
-      throw new AppError(
-        "Live market data is not connected",
-        400,
-        "LIVE_MARKET_DATA_NOT_CONNECTED",
-      );
-    }
+  subscribe(
+    userId: string,
+    brokerAccountId: string,
+    tokens: AngelSubscribeToken[],
+  ) {
+    const session = this.getUserSession(userId, brokerAccountId);
 
-    this.angelClient.subscribe(tokens);
+    session.client.subscribe(tokens);
 
     for (const group of tokens) {
       for (const token of group.tokens) {
-        this.subscribedTokens.add(`${group.exchangeType}:${token}`);
+        session.subscribedTokens.add(`${group.exchangeType}:${token}`);
       }
     }
 
+    this.touch(brokerAccountId);
+
     return {
       success: true,
-      subscribed: Array.from(this.subscribedTokens),
+      brokerAccountId,
+      subscribed: Array.from(session.subscribedTokens),
     };
   }
 
-  unsubscribe(tokens: AngelSubscribeToken[]) {
-    if (!this.angelClient?.isConnected()) {
-      throw new AppError(
-        "Live market data is not connected",
-        400,
-        "LIVE_MARKET_DATA_NOT_CONNECTED",
-      );
-    }
+  unsubscribe(
+    userId: string,
+    brokerAccountId: string,
+    tokens: AngelSubscribeToken[],
+  ) {
+    const session = this.getUserSession(userId, brokerAccountId);
 
-    this.angelClient.unsubscribe(tokens);
+    session.client.unsubscribe(tokens);
 
     for (const group of tokens) {
       for (const token of group.tokens) {
-        this.subscribedTokens.delete(`${group.exchangeType}:${token}`);
+        session.subscribedTokens.delete(`${group.exchangeType}:${token}`);
       }
     }
 
+    this.touch(brokerAccountId);
+
     return {
       success: true,
-      subscribed: Array.from(this.subscribedTokens),
+      brokerAccountId,
+      subscribed: Array.from(session.subscribedTokens),
     };
   }
 
-  getLatest(token: string) {
+  getLatest(userId: string, brokerAccountId: string, token: string) {
+    this.getUserSession(userId, brokerAccountId);
+    this.touch(brokerAccountId);
+
     return {
+      brokerAccountId,
       token,
-      tick: liveTickStore.getTick(token),
+      tick: liveTickStore.getTick(brokerAccountId, token),
     };
   }
 
-  getStatus() {
+  getManyLatest(userId: string, brokerAccountId: string, tokens: string[]) {
+    this.getUserSession(userId, brokerAccountId);
+    this.touch(brokerAccountId);
+
     return {
-      connected: this.angelClient?.isConnected() ?? false,
-      brokerAccountId: this.brokerAccountId,
-      subscribed: Array.from(this.subscribedTokens),
+      brokerAccountId,
+      ticks: liveTickStore.getMany(brokerAccountId, tokens),
     };
   }
 
-  stop() {
-    this.angelClient?.close();
-    this.angelClient = null;
-    this.brokerAccountId = null;
-    this.subscribedTokens.clear();
+  getStatus(userId: string, brokerAccountId: string) {
+    const session = this.getUserSession(userId, brokerAccountId);
+
+    this.touch(brokerAccountId);
+
+    return {
+      connected: session.client.isConnected(),
+      brokerAccountId,
+      subscribed: Array.from(session.subscribedTokens),
+      lastActivityAt: new Date(session.lastActivityAt).toISOString(),
+    };
+  }
+
+  stop(userId: string, brokerAccountId: string) {
+    const session = this.getUserSession(userId, brokerAccountId);
+
+    session.client.close();
+    this.sessions.delete(brokerAccountId);
+    liveTickStore.clearBroker(brokerAccountId);
 
     return {
       success: true,
       message: "Angel WebSocket stopped",
+      brokerAccountId,
     };
+  }
+
+  cleanupInactiveSessions() {
+    const now = Date.now();
+
+    for (const [brokerAccountId, session] of this.sessions.entries()) {
+      const inactiveForMs = now - session.lastActivityAt;
+
+      if (inactiveForMs >= this.inactiveTimeoutMs) {
+        session.client.close();
+        this.sessions.delete(brokerAccountId);
+        liveTickStore.clearBroker(brokerAccountId);
+
+        console.log(
+          `[Live Market Data] Cleaned inactive session: ${brokerAccountId}`,
+        );
+      }
+    }
+  }
+
+  getAllStatus() {
+    return {
+      activeSessions: this.sessions.size,
+      sessions: Array.from(this.sessions.values()).map((session) => ({
+        brokerAccountId: session.brokerAccountId,
+        connected: session.client.isConnected(),
+        subscribed: Array.from(session.subscribedTokens),
+        lastActivityAt: new Date(session.lastActivityAt).toISOString(),
+      })),
+    };
+  }
+
+  private getUserSession(userId: string, brokerAccountId: string) {
+    const session = this.sessions.get(brokerAccountId);
+
+    if (!session) {
+      throw new AppError(
+        "Live market data is not connected",
+        400,
+        "LIVE_MARKET_DATA_NOT_CONNECTED",
+      );
+    }
+
+    if (session.userId !== userId) {
+      throw new AppError("Forbidden", 403, "FORBIDDEN");
+    }
+
+    if (!session.client.isConnected()) {
+      throw new AppError(
+        "Live market data is disconnected",
+        400,
+        "LIVE_MARKET_DATA_DISCONNECTED",
+      );
+    }
+
+    return session;
+  }
+
+  private touch(brokerAccountId: string) {
+    const session = this.sessions.get(brokerAccountId);
+
+    if (session) {
+      session.lastActivityAt = Date.now();
+    }
   }
 }
 

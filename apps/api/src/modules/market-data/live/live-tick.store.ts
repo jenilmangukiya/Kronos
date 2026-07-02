@@ -3,23 +3,31 @@ import type { AngelTick } from "./types.js";
 export class LiveTickStore {
   private readonly ticks = new Map<string, AngelTick>();
 
-  setTick(tick: AngelTick) {
-    this.ticks.set(tick.token, tick);
+  private getKey(brokerAccountId: string, token: string) {
+    return `${brokerAccountId}:${token}`;
   }
 
-  getTick(token: string) {
-    return this.ticks.get(token) ?? null;
+  setTick(brokerAccountId: string, tick: AngelTick) {
+    this.ticks.set(this.getKey(brokerAccountId, tick.token), tick);
   }
 
-  getMany(tokens: string[]) {
+  getTick(brokerAccountId: string, token: string) {
+    return this.ticks.get(this.getKey(brokerAccountId, token)) ?? null;
+  }
+
+  getMany(brokerAccountId: string, tokens: string[]) {
     return tokens.map((token) => ({
       token,
-      tick: this.getTick(token),
+      tick: this.getTick(brokerAccountId, token),
     }));
   }
 
-  getAll() {
-    return Array.from(this.ticks.values());
+  clearBroker(brokerAccountId: string) {
+    for (const key of this.ticks.keys()) {
+      if (key.startsWith(`${brokerAccountId}:`)) {
+        this.ticks.delete(key);
+      }
+    }
   }
 
   clear() {

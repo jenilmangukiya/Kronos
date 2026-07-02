@@ -8,7 +8,10 @@ import {
   candlesQuerySchema,
   instrumentSearchQuerySchema,
   liveLatestQuerySchema,
+  liveManyLatestQuerySchema,
   liveStartQuerySchema,
+  liveStatusQuerySchema,
+  liveStopQuerySchema,
   liveSubscribeBodySchema,
   ltpQuerySchema,
   optionChainQuerySchema,
@@ -191,55 +194,6 @@ export async function marketDataRoutes(app: FastifyInstance) {
   );
 
   typedApp.post(
-    "/market-data/live/test",
-    {
-      preHandler: [app.authenticate],
-      schema: {
-        tags: ["Market Data"],
-        summary: "Test Angel live WebSocket",
-        security: [{ bearerAuth: [] }],
-        querystring: z.object({
-          brokerAccountId: z.string().min(1),
-        }),
-        response: {
-          200: anyResponseSchema,
-        },
-      },
-    },
-    async (request) => {
-      const brokerAccount = await app.db.brokerAccount.findFirst({
-        where: {
-          id: request.query.brokerAccountId,
-          userId: request.user?.id,
-        },
-      });
-
-      if (
-        !brokerAccount ||
-        !brokerAccount.apiKey ||
-        !brokerAccount.accessToken ||
-        !brokerAccount.feedToken
-      ) {
-        throw new Error("Valid Angel broker session not found");
-      }
-
-      const wsClient = new AngelWebSocketClient({
-        apiKey: brokerAccount.apiKey,
-        clientCode: brokerAccount.clientId,
-        accessToken: brokerAccount.accessToken,
-        feedToken: brokerAccount.feedToken,
-      });
-
-      wsClient.connect();
-
-      return {
-        success: true,
-        message: "Angel WebSocket started. Check backend logs.",
-      };
-    },
-  );
-
-  typedApp.post(
     "/market-data/live/start",
     {
       preHandler: [app.authenticate],
@@ -248,9 +202,7 @@ export async function marketDataRoutes(app: FastifyInstance) {
         summary: "Start live market data WebSocket",
         security: [{ bearerAuth: [] }],
         querystring: liveStartQuerySchema,
-        response: {
-          200: anyResponseSchema,
-        },
+        response: { 200: anyResponseSchema },
       },
     },
     async (request) => {
@@ -275,16 +227,21 @@ export async function marketDataRoutes(app: FastifyInstance) {
         summary: "Subscribe live market data tokens",
         security: [{ bearerAuth: [] }],
         body: liveSubscribeBodySchema,
-        response: {
-          200: anyResponseSchema,
-        },
+        response: { 200: anyResponseSchema },
       },
     },
     async (request) => {
-      return liveMarketDataService.subscribe(request.body.tokens);
+      if (!request.user?.id) {
+        throw new Error("Unauthorized");
+      }
+
+      return liveMarketDataService.subscribe(
+        request.user.id,
+        request.body.brokerAccountId,
+        request.body.tokens,
+      );
     },
   );
-
   typedApp.post(
     "/market-data/live/unsubscribe",
     {
@@ -300,7 +257,15 @@ export async function marketDataRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      return liveMarketDataService.unsubscribe(request.body.tokens);
+      if (!request.user?.id) {
+        throw new Error("Unauthorized");
+      }
+
+      return liveMarketDataService.unsubscribe(
+        request.user.id,
+        request.body.brokerAccountId,
+        request.body.tokens,
+      );
     },
   );
 
@@ -313,13 +278,19 @@ export async function marketDataRoutes(app: FastifyInstance) {
         summary: "Get latest live tick",
         security: [{ bearerAuth: [] }],
         querystring: liveLatestQuerySchema,
-        response: {
-          200: anyResponseSchema,
-        },
+        response: { 200: anyResponseSchema },
       },
     },
     async (request) => {
-      return liveMarketDataService.getLatest(request.query.token);
+      if (!request.user?.id) {
+        throw new Error("Unauthorized");
+      }
+
+      return liveMarketDataService.getLatest(
+        request.user.id,
+        request.query.brokerAccountId,
+        request.query.token,
+      );
     },
   );
 
@@ -331,13 +302,19 @@ export async function marketDataRoutes(app: FastifyInstance) {
         tags: ["Market Data"],
         summary: "Get live market data status",
         security: [{ bearerAuth: [] }],
-        response: {
-          200: anyResponseSchema,
-        },
+        querystring: liveStatusQuerySchema,
+        response: { 200: anyResponseSchema },
       },
     },
-    async () => {
-      return liveMarketDataService.getStatus();
+    async (request) => {
+      if (!request.user?.id) {
+        throw new Error("Unauthorized");
+      }
+
+      return liveMarketDataService.getStatus(
+        request.user.id,
+        request.query.brokerAccountId,
+      );
     },
   );
 
@@ -349,13 +326,49 @@ export async function marketDataRoutes(app: FastifyInstance) {
         tags: ["Market Data"],
         summary: "Stop live market data WebSocket",
         security: [{ bearerAuth: [] }],
-        response: {
-          200: anyResponseSchema,
-        },
+        querystring: liveStopQuerySchema,
+        response: { 200: anyResponseSchema },
       },
     },
-    async () => {
-      return liveMarketDataService.stop();
+    async (request) => {
+      if (!request.user?.id) {
+        throw new Error("Unauthorized");
+      }
+
+      return liveMarketDataService.stop(
+        request.user.id,
+        request.query.brokerAccountId,
+      );
+    },
+  );
+
+  typedApp.get(
+    "/market-data/live/latest-many",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Get latest live ticks",
+        security: [{ bearerAuth: [] }],
+        querystring: liveManyLatestQuerySchema,
+        response: { 200: anyResponseSchema },
+      },
+    },
+    async (request) => {
+      if (!request.user?.id) {
+        throw new Error("Unauthorized");
+      }
+
+      const tokens = request.query.tokens
+        .split(",")
+        .map((token) => token.trim())
+        .filter(Boolean);
+
+      return liveMarketDataService.getManyLatest(
+        request.user.id,
+        request.query.brokerAccountId,
+        tokens,
+      );
     },
   );
 }

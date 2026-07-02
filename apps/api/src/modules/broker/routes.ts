@@ -16,6 +16,7 @@ import {
   getHoldingsResponseSchema,
   getPositionsResponseSchema,
 } from "./schemas.js";
+import { anyResponseSchema } from "../market-data/schemas.js";
 
 export async function brokerRoutes(app: FastifyInstance) {
   const brokerService = new BrokerService(app.db);
@@ -56,6 +57,24 @@ export async function brokerRoutes(app: FastifyInstance) {
     },
     async (request) => {
       return brokerController.getMyBrokers(request.user?.id);
+    },
+  );
+
+  typedApp.get(
+    "/broker/accounts",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Broker"],
+        summary: "Get connected broker accounts",
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return brokerController.getAccounts(request.user?.id);
     },
   );
 

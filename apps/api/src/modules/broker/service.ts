@@ -70,6 +70,45 @@ export class BrokerService {
     });
   }
 
+  async getAccounts(userId: string) {
+    const accounts = await this.db.brokerAccount.findMany({
+      where: {
+        userId,
+      },
+      select: {
+        id: true,
+        broker: true,
+        clientId: true,
+        accessToken: true,
+        feedToken: true,
+        tokenExpiresAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return accounts.map((account) => {
+      const hasSession = Boolean(account.accessToken && account.feedToken);
+
+      const sessionExpired =
+        !account.tokenExpiresAt || account.tokenExpiresAt <= new Date();
+
+      return {
+        id: account.id,
+        broker: account.broker,
+        clientId: account.clientId,
+        hasSession,
+        sessionExpired,
+        tokenExpiresAt: account.tokenExpiresAt,
+        createdAt: account.createdAt,
+        updatedAt: account.updatedAt,
+      };
+    });
+  }
+
   async disconnect(userId: string, brokerAccountId: string) {
     const brokerAccount = await this.db.brokerAccount.findFirst({
       where: {

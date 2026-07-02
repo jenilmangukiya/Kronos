@@ -21,6 +21,14 @@ export class BrokerController {
     return this.brokerService.getMyBrokers(userId);
   }
 
+  async getAccounts(userId: string | undefined) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.brokerService.getAccounts(userId);
+  }
+
   async disconnect(userId: string | undefined, brokerAccountId: string) {
     if (!userId) {
       throw new AppError("Unauthorized", 401, "UNAUTHORIZED");

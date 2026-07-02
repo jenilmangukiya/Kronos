@@ -154,6 +154,19 @@ export class MarketDataService {
 
     const tokens = selectedContracts.map((contract) => contract.token);
 
+    const liveSubscription = {
+      tokens: [
+        {
+          exchangeType: 1,
+          tokens: [indexInstrument.symboltoken],
+        },
+        {
+          exchangeType: 2,
+          tokens,
+        },
+      ],
+    };
+
     const quoteResponse = await marketDataProvider.getQuoteForTokens({
       apiKey: brokerAccount.apiKey!,
       accessToken: brokerAccount.accessToken!,
@@ -293,6 +306,7 @@ export class MarketDataService {
         maxCallOiStrike: maxCallOiRow.strike,
         maxPutOiStrike: maxPutOiRow.strike,
       },
+      liveSubscription,
       rows,
     };
   }

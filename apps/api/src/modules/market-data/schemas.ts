@@ -75,3 +75,28 @@ export const optionGreeksQuerySchema = z.object({
 });
 
 export type OptionGreeksQueryInput = z.infer<typeof optionGreeksQuerySchema>;
+
+export const liveStartQuerySchema = z.object({
+  brokerAccountId: z.string().min(1),
+});
+
+export const liveSubscribeBodySchema = z.object({
+  tokens: z.array(
+    z.object({
+      exchangeType: z.union([
+        z.literal(1),
+        z.literal(2),
+        z.literal(3),
+        z.literal(4),
+        z.literal(5),
+        z.literal(7),
+        z.literal(13),
+      ]),
+      tokens: z.array(z.string().min(1)).min(1),
+    }),
+  ),
+});
+
+export const liveLatestQuerySchema = z.object({
+  token: z.string().min(1),
+});

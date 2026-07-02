@@ -7,12 +7,19 @@ import {
   anyResponseSchema,
   candlesQuerySchema,
   instrumentSearchQuerySchema,
+  liveLatestQuerySchema,
+  liveStartQuerySchema,
+  liveSubscribeBodySchema,
   ltpQuerySchema,
   optionChainQuerySchema,
   optionExpiriesQuerySchema,
   optionGreeksQuerySchema,
   quoteQuerySchema,
 } from "./schemas.js";
+import { AngelWebSocketClient } from "./live/angel-websocket.client.js";
+import z from "zod";
+import { liveTickStore } from "./live/live-tick.store.js";
+import { liveMarketDataService } from "./live/live-market-data.service.js";
 
 export async function marketDataRoutes(app: FastifyInstance) {
   const typedApp = app.withTypeProvider<ZodTypeProvider>();
@@ -180,6 +187,175 @@ export async function marketDataRoutes(app: FastifyInstance) {
         request.user?.id,
         request.query,
       );
+    },
+  );
+
+  typedApp.post(
+    "/market-data/live/test",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Test Angel live WebSocket",
+        security: [{ bearerAuth: [] }],
+        querystring: z.object({
+          brokerAccountId: z.string().min(1),
+        }),
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const brokerAccount = await app.db.brokerAccount.findFirst({
+        where: {
+          id: request.query.brokerAccountId,
+          userId: request.user?.id,
+        },
+      });
+
+      if (
+        !brokerAccount ||
+        !brokerAccount.apiKey ||
+        !brokerAccount.accessToken ||
+        !brokerAccount.feedToken
+      ) {
+        throw new Error("Valid Angel broker session not found");
+      }
+
+      const wsClient = new AngelWebSocketClient({
+        apiKey: brokerAccount.apiKey,
+        clientCode: brokerAccount.clientId,
+        accessToken: brokerAccount.accessToken,
+        feedToken: brokerAccount.feedToken,
+      });
+
+      wsClient.connect();
+
+      return {
+        success: true,
+        message: "Angel WebSocket started. Check backend logs.",
+      };
+    },
+  );
+
+  typedApp.post(
+    "/market-data/live/start",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Start live market data WebSocket",
+        security: [{ bearerAuth: [] }],
+        querystring: liveStartQuerySchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      if (!request.user?.id) {
+        throw new Error("Unauthorized");
+      }
+
+      return liveMarketDataService.start(
+        app,
+        request.user.id,
+        request.query.brokerAccountId,
+      );
+    },
+  );
+
+  typedApp.post(
+    "/market-data/live/subscribe",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Subscribe live market data tokens",
+        security: [{ bearerAuth: [] }],
+        body: liveSubscribeBodySchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return liveMarketDataService.subscribe(request.body.tokens);
+    },
+  );
+
+  typedApp.post(
+    "/market-data/live/unsubscribe",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Unsubscribe live market data tokens",
+        security: [{ bearerAuth: [] }],
+        body: liveSubscribeBodySchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return liveMarketDataService.unsubscribe(request.body.tokens);
+    },
+  );
+
+  typedApp.get(
+    "/market-data/live/latest",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Get latest live tick",
+        security: [{ bearerAuth: [] }],
+        querystring: liveLatestQuerySchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return liveMarketDataService.getLatest(request.query.token);
+    },
+  );
+
+  typedApp.get(
+    "/market-data/live/status",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Get live market data status",
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async () => {
+      return liveMarketDataService.getStatus();
+    },
+  );
+
+  typedApp.post(
+    "/market-data/live/stop",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Stop live market data WebSocket",
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async () => {
+      return liveMarketDataService.stop();
     },
   );
 }

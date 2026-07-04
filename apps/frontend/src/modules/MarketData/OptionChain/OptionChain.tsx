@@ -7,6 +7,7 @@ import { OptionChainTable } from "./components/OptionChainTable";
 import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
 import { Spinner } from "../../../components/ui/Spinner";
+import { Badge } from "../../../components/ui/Badge";
 import { AlertCircle, ShieldAlert } from "lucide-react";
 
 export const OptionChain: React.FC = () => {
@@ -50,11 +51,18 @@ export const OptionChain: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Option Chain</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Analyze real-time derivatives with live LTP updates and Greeks.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-white">Option Chain</h1>
+            <Badge variant="info" className="!bg-blue-600/10 !text-blue-400 border-blue-500/20">
+              Paper Trading Only
+            </Badge>
+          </div>
+          <p className="text-slate-400 text-sm mt-1">
+            Analyze real-time derivatives with live LTP updates and Greeks.
+          </p>
+        </div>
       </div>
 
       <OptionChainControls
@@ -94,6 +102,8 @@ export const OptionChain: React.FC = () => {
               rows={derivedRows}
               underlyingLtp={optionChain.underlying.ltp}
               atmStrike={optionChain.underlying.atmStrike}
+              brokerAccountId={activeAccount?.id}
+              symbol={symbol}
             />
           </div>
         </div>

@@ -53,7 +53,6 @@ export class AngelWebSocketClient {
 
       if (tick) {
         liveTickStore.setTick(this.params.brokerAccountId, tick);
-        console.log("[Angel WS] Tick:", tick);
       }
     });
 

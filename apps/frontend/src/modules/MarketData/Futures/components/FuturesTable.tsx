@@ -2,12 +2,14 @@ import React from "react";
 import { FutureContractUI } from "../types";
 import { Table, TableBody, TableCell, TableHeadCell, TableHeader, TableRow } from "../../../../components/ui/Table";
 import { formatNumber } from "../../../../utils/format";
+import { PaperTradeButtons } from "../../../PaperTrading/components/PaperTradeButtons";
 
 interface FuturesTableProps {
   rows: FutureContractUI[];
+  brokerAccountId?: string;
 }
 
-export const FuturesTable: React.FC<FuturesTableProps> = ({ rows }) => {
+export const FuturesTable: React.FC<FuturesTableProps> = ({ rows, brokerAccountId }) => {
   const getFlashClass = (direction?: "up" | "down" | "flat") => {
     if (direction === "up") return "bg-emerald-500/25 text-emerald-300 font-bold transition-all duration-300";
     if (direction === "down") return "bg-rose-500/25 text-rose-300 font-bold transition-all duration-300";
@@ -42,6 +44,7 @@ export const FuturesTable: React.FC<FuturesTableProps> = ({ rows }) => {
           <TableHeadCell className="text-right">Bid</TableHeadCell>
           <TableHeadCell className="text-right">Ask</TableHeadCell>
           <TableHeadCell className="text-right">Lot Size</TableHeadCell>
+          <TableHeadCell className="text-center py-3">Actions</TableHeadCell>
         </TableRow>
       </TableHeader>
 
@@ -87,6 +90,19 @@ export const FuturesTable: React.FC<FuturesTableProps> = ({ rows }) => {
               </TableCell>
               <TableCell className="text-right text-slate-400">
                 {row.lotSize}
+              </TableCell>
+              <TableCell className="text-center py-2">
+                <PaperTradeButtons
+                  brokerAccountId={brokerAccountId}
+                  instrumentType="FUTURE"
+                  token={row.token}
+                  symbol={row.symbol}
+                  exchangeType={2}
+                  exchange="NFO"
+                  lotSize={row.lotSize}
+                  price={row.ltp}
+                  defaultQuantity={row.lotSize}
+                />
               </TableCell>
             </TableRow>
           );

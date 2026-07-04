@@ -2,6 +2,7 @@ import React from "react";
 import { OptionChainRow } from "../../../../services/market-data/MarketDataService";
 import { Table, TableBody, TableCell, TableHeadCell, TableHeader, TableRow } from "../../../../components/ui/Table";
 import { formatNumber, formatGreek, formatPercent } from "../../../../utils/format";
+import { PaperTradeButtons } from "../../../PaperTrading/components/PaperTradeButtons";
 
 type UILeg = any;
 
@@ -9,13 +10,19 @@ interface OptionChainTableProps {
   rows: OptionChainRow[];
   underlyingLtp: number;
   atmStrike: number;
+  brokerAccountId?: string;
+  symbol: string;
 }
 
 export const OptionChainTable: React.FC<OptionChainTableProps> = ({
   rows,
   underlyingLtp,
   atmStrike,
+  brokerAccountId,
+  symbol,
 }) => {
+  const lotSize = symbol.toUpperCase().includes("BANKNIFTY") ? 15 : symbol.toUpperCase().includes("NIFTY") ? 65 : 1;
+
   return (
     <Table className="text-xs">
       <TableHeader className="sticky top-0 z-10 bg-slate-950">
@@ -92,7 +99,23 @@ export const OptionChainTable: React.FC<OptionChainTableProps> = ({
                   ceIsItm ? "bg-slate-900/30" : ""
                 } ${getFlashClass(ceLeg?.direction)}`}
               >
-                {ceLeg?.ltp ? formatNumber(ceLeg.ltp, 2) : "-"}
+                <div className="flex items-center justify-end gap-2.5">
+                  {ceLeg?.ltp && (
+                    <PaperTradeButtons
+                      brokerAccountId={brokerAccountId}
+                      instrumentType="OPTION"
+                      token={ceLeg.token}
+                      symbol={ceLeg.symbol}
+                      exchangeType={2}
+                      exchange="NFO"
+                      lotSize={lotSize}
+                      price={ceLeg.ltp}
+                      defaultQuantity={lotSize}
+                      compact={true}
+                    />
+                  )}
+                  <span>{ceLeg?.ltp ? formatNumber(ceLeg.ltp, 2) : "-"}</span>
+                </div>
               </TableCell>
               <TableCell className={`text-right text-slate-400 ${ceIsItm ? "bg-slate-900/30" : ""}`}>
                 {ceLeg?.bid ? formatNumber(ceLeg.bid, 2) : "-"}
@@ -120,7 +143,23 @@ export const OptionChainTable: React.FC<OptionChainTableProps> = ({
                   peIsItm ? "bg-slate-900/30" : ""
                 } ${getFlashClass(peLeg?.direction)}`}
               >
-                {peLeg?.ltp ? formatNumber(peLeg.ltp, 2) : "-"}
+                <div className="flex items-center justify-start gap-2.5">
+                  <span>{peLeg?.ltp ? formatNumber(peLeg.ltp, 2) : "-"}</span>
+                  {peLeg?.ltp && (
+                    <PaperTradeButtons
+                      brokerAccountId={brokerAccountId}
+                      instrumentType="OPTION"
+                      token={peLeg.token}
+                      symbol={peLeg.symbol}
+                      exchangeType={2}
+                      exchange="NFO"
+                      lotSize={lotSize}
+                      price={peLeg.ltp}
+                      defaultQuantity={lotSize}
+                      compact={true}
+                    />
+                  )}
+                </div>
               </TableCell>
               <TableCell className={`text-left text-slate-400 ${peIsItm ? "bg-slate-900/30" : ""}`}>
                 {peLeg?.delta ? formatGreek(peLeg.delta) : "-"}
@@ -141,3 +180,5 @@ export const OptionChainTable: React.FC<OptionChainTableProps> = ({
     </Table>
   );
 };
+
+

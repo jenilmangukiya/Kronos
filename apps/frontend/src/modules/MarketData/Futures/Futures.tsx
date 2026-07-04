@@ -7,6 +7,7 @@ import { FuturesTable } from "./components/FuturesTable";
 import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
 import { Spinner } from "../../../components/ui/Spinner";
+import { Badge } from "../../../components/ui/Badge";
 import { AlertCircle, ShieldAlert } from "lucide-react";
 
 export const Futures: React.FC = () => {
@@ -46,11 +47,18 @@ export const Futures: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Futures</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Analyze real-time futures contracts with live LTP updates.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-white">Futures</h1>
+            <Badge variant="info" className="!bg-blue-600/10 !text-blue-400 border-blue-500/20">
+              Paper Trading Only
+            </Badge>
+          </div>
+          <p className="text-slate-400 text-sm mt-1">
+            Analyze real-time futures contracts with live LTP updates.
+          </p>
+        </div>
       </div>
 
       <FuturesControls
@@ -80,7 +88,7 @@ export const Futures: React.FC = () => {
           <FuturesSummary summary={summary} />
 
           <div className="rounded-xl border border-slate-800 bg-slate-900/20 overflow-hidden shadow-xl">
-            <FuturesTable rows={derivedRows} />
+            <FuturesTable rows={derivedRows} brokerAccountId={activeAccount?.id} />
           </div>
         </div>
       ) : (

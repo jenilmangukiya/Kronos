@@ -46,6 +46,74 @@ export class AngelInstrumentProvider {
     };
   }
 
+  async getFutureExpiries(query: {
+    symbol: string;
+    exchange?: string;
+    instrumentType?: string;
+  }) {
+    const instruments = await this.getInstruments();
+
+    const symbol = query.symbol.toUpperCase();
+    const exchange = query.exchange ?? "NFO";
+    const instrumentType = query.instrumentType ?? "FUTIDX";
+
+    const expiries = instruments
+      .filter((instrument) => {
+        return (
+          instrument.name.toUpperCase() === symbol &&
+          instrument.exch_seg === exchange &&
+          instrument.instrumenttype === instrumentType &&
+          instrument.expiry
+        );
+      })
+      .map((instrument) => instrument.expiry);
+
+    return [...new Set(expiries)].sort((a, b) => {
+      return (
+        this.parseAngelExpiry(a).getTime() - this.parseAngelExpiry(b).getTime()
+      );
+    });
+  }
+
+  async getFutureContracts(query: {
+    symbol: string;
+    exchange?: string;
+    instrumentType?: string;
+  }) {
+    const instruments = await this.getInstruments();
+
+    const symbol = query.symbol.toUpperCase();
+    const exchange = query.exchange ?? "NFO";
+    const instrumentType = query.instrumentType ?? "FUTIDX";
+
+    return instruments
+      .filter((instrument) => {
+        return (
+          instrument.name.toUpperCase() === symbol &&
+          instrument.exch_seg === exchange &&
+          instrument.instrumenttype === instrumentType &&
+          instrument.expiry
+        );
+      })
+      .map((instrument) => {
+        return {
+          token: instrument.token,
+          symbol: instrument.symbol,
+          name: instrument.name,
+          expiry: instrument.expiry,
+          lotSize: Number(instrument.lotsize),
+          instrumentType: instrument.instrumenttype,
+          exchange: instrument.exch_seg,
+        };
+      })
+      .sort((a, b) => {
+        return (
+          this.parseAngelExpiry(a.expiry).getTime() -
+          this.parseAngelExpiry(b.expiry).getTime()
+        );
+      });
+  }
+
   async getOptionExpiries(query: {
     symbol: string;
     exchange?: string;

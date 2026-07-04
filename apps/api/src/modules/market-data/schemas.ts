@@ -115,3 +115,22 @@ export const liveStatusQuerySchema = z.object({
 export const liveStopQuerySchema = z.object({
   brokerAccountId: z.string().min(1),
 });
+
+export const futureExpiriesQuerySchema = z.object({
+  symbol: z.string().min(1),
+  exchange: z.string().default("NFO"),
+  instrumentType: z.string().default("FUTIDX"),
+});
+
+export const futuresQuerySchema = z.object({
+  brokerAccountId: z.string().min(1),
+  symbol: z.string().min(1),
+  exchange: z.string().default("NFO"),
+  instrumentType: z.string().default("FUTIDX"),
+});
+
+export type FutureExpiriesQueryInput = z.infer<
+  typeof futureExpiriesQuerySchema
+>;
+
+export type FuturesQueryInput = z.infer<typeof futuresQuerySchema>;

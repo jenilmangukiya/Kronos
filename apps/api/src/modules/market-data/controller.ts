@@ -2,6 +2,8 @@ import { AppError } from "../../errors/app-error.js";
 import { MarketDataService } from "./service.js";
 import type {
   CandlesQuery,
+  FutureExpiriesQuery,
+  FuturesQuery,
   InstrumentSearchQuery,
   LtpQuery,
   OptionChainQuery,
@@ -81,5 +83,24 @@ export class MarketDataController {
     }
 
     return this.marketDataService.getOptionGreeks(userId, query);
+  }
+
+  async getFutureExpiries(
+    userId: string | undefined,
+    query: FutureExpiriesQuery,
+  ) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.marketDataService.getFutureExpiries(query);
+  }
+
+  async getFutures(userId: string | undefined, query: FuturesQuery) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.marketDataService.getFutures(userId, query);
   }
 }

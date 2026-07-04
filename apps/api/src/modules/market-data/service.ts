@@ -4,6 +4,8 @@ import { AppError } from "../../errors/app-error.js";
 import { AngelMarketDataProvider } from "./providers/angel.provider.js";
 import type {
   CandlesQuery,
+  FutureExpiriesQuery,
+  FuturesQuery,
   InstrumentSearchQuery,
   LtpQuery,
   OptionChainQuery,
@@ -325,6 +327,88 @@ export class MarketDataService {
       symbol: query.symbol,
       expiry: query.expiry,
     });
+  }
+
+  async getFutureExpiries(query: FutureExpiriesQuery) {
+    return angelInstrumentProvider.getFutureExpiries(query);
+  }
+
+  async getFutures(userId: string, query: FuturesQuery) {
+    const brokerAccount = await this.getActiveAngelBrokerAccount(
+      userId,
+      query.brokerAccountId,
+    );
+
+    const contracts = await angelInstrumentProvider.getFutureContracts({
+      symbol: query.symbol,
+      exchange: query.exchange,
+      instrumentType: query.instrumentType,
+    });
+
+    if (!contracts.length) {
+      throw new AppError(
+        "Future contracts not found",
+        404,
+        "FUTURE_CONTRACTS_NOT_FOUND",
+      );
+    }
+
+    const marketDataProvider = new AngelMarketDataProvider();
+
+    const tokens = contracts.map((contract) => contract.token);
+
+    const quoteResponse = await marketDataProvider.getQuoteForTokens({
+      apiKey: brokerAccount.apiKey!,
+      accessToken: brokerAccount.accessToken!,
+      exchange: query.exchange ?? "NFO",
+      tokens,
+      mode: "FULL",
+    });
+
+    const fetchedQuotes = quoteResponse?.data?.fetched ?? [];
+
+    const quoteByToken = new Map(
+      fetchedQuotes.map((quote: any) => [String(quote.symbolToken), quote]),
+    );
+
+    const rows = contracts.map((contract) => {
+      const quote: any = quoteByToken.get(String(contract.token));
+
+      return {
+        token: contract.token,
+        symbol: contract.symbol,
+        name: contract.name,
+        expiry: contract.expiry,
+        lotSize: contract.lotSize,
+        instrumentType: contract.instrumentType,
+        exchange: contract.exchange,
+        ltp: quote?.ltp ?? null,
+        oi: quote?.opnInterest ?? null,
+        volume: quote?.tradeVolume ?? null,
+        bid: quote?.depth?.buy?.[0]?.price ?? null,
+        ask: quote?.depth?.sell?.[0]?.price ?? null,
+        open: quote?.open ?? null,
+        high: quote?.high ?? null,
+        low: quote?.low ?? null,
+        close: quote?.close ?? null,
+      };
+    });
+
+    return {
+      symbol: query.symbol,
+      exchange: query.exchange ?? "NFO",
+      instrumentType: query.instrumentType ?? "FUTIDX",
+      count: rows.length,
+      liveSubscription: {
+        tokens: [
+          {
+            exchangeType: 2,
+            tokens,
+          },
+        ],
+      },
+      rows,
+    };
   }
 
   private async getActiveAngelBrokerAccount(

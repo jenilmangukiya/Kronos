@@ -74,3 +74,26 @@ export interface OptionGreeksQuery {
   symbol: string;
   expiry: string;
 }
+
+export interface FutureExpiriesQuery {
+  symbol: string;
+  exchange?: string;
+  instrumentType?: string;
+}
+
+export interface FuturesQuery {
+  brokerAccountId: string;
+  symbol: string;
+  exchange?: string;
+  instrumentType?: string;
+}
+
+export interface FutureContract {
+  token: string;
+  symbol: string;
+  name: string;
+  expiry: string;
+  lotSize: number;
+  instrumentType: string;
+  exchange: string;
+}

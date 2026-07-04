@@ -6,6 +6,8 @@ import { MarketDataService } from "./service.js";
 import {
   anyResponseSchema,
   candlesQuerySchema,
+  futureExpiriesQuerySchema,
+  futuresQuerySchema,
   instrumentSearchQuerySchema,
   liveLatestQuerySchema,
   liveManyLatestQuerySchema,
@@ -369,6 +371,47 @@ export async function marketDataRoutes(app: FastifyInstance) {
         request.query.brokerAccountId,
         tokens,
       );
+    },
+  );
+
+  typedApp.get(
+    "/market-data/future-expiries",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Get future expiries",
+        security: [{ bearerAuth: [] }],
+        querystring: futureExpiriesQuerySchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return marketDataController.getFutureExpiries(
+        request.user?.id,
+        request.query,
+      );
+    },
+  );
+
+  typedApp.get(
+    "/market-data/futures",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Market Data"],
+        summary: "Get futures contracts with quote data",
+        security: [{ bearerAuth: [] }],
+        querystring: futuresQuerySchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return marketDataController.getFutures(request.user?.id, request.query);
     },
   );
 }

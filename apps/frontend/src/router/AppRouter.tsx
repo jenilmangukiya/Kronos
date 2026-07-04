@@ -9,6 +9,9 @@ import { BrokerSetup } from "../modules/Broker/BrokerSetup/BrokerSetup";
 import { OptionChain } from "../modules/MarketData/OptionChain/OptionChain";
 import { Futures } from "../modules/MarketData/Futures/Futures";
 import { PaperTradingDashboard } from "../modules/PaperTrading/PaperTradingDashboard/PaperTradingDashboard";
+import { StrategyList } from "../modules/Strategies/StrategyList/StrategyList";
+import { StrategyCreate } from "../modules/Strategies/StrategyCreate/StrategyCreate";
+import { StrategyDetails } from "../modules/Strategies/StrategyDetails/StrategyDetails";
 import { getAccessToken } from "../utils/storage";
 
 const RootRedirect: React.FC = () => {
@@ -37,6 +40,9 @@ export const AppRouter: React.FC = () => {
           <Route path="option-chain" element={<OptionChain />} />
           <Route path="futures" element={<Futures />} />
           <Route path="paper-trading" element={<PaperTradingDashboard />} />
+          <Route path="strategies" element={<StrategyList />} />
+          <Route path="strategies/create" element={<StrategyCreate />} />
+          <Route path="strategies/:id" element={<StrategyDetails />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -18,6 +18,8 @@ model User {
   paperOrders    PaperOrder[]
   paperPositions PaperPosition[]
 
+  strategies Strategy[]
+
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
   brokerAccounts BrokerAccount[]
@@ -148,4 +150,69 @@ model PaperPosition {
   @@index([userId])
   @@index([token])
   @@map("paper_positions")
+}
+
+enum StrategyStatus {
+  STOPPED
+  RUNNING
+}
+
+enum StrategyMode {
+  PAPER
+  LIVE
+}
+
+enum StrategyInstrumentType {
+  EQUITY
+  FUTURE
+  OPTION
+}
+
+model Strategy {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  brokerAccountId String? @map("broker_account_id")
+
+  name String
+
+  symbol String
+
+  instrumentType StrategyInstrumentType @map("instrument_type")
+
+  mode StrategyMode @default(PAPER)
+
+  status StrategyStatus @default(STOPPED)
+
+  rules Json
+  trade Json
+  risk  Json?
+
+  lastTriggeredAt DateTime? @map("last_triggered_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  logs StrategyLog[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("strategies")
+}
+
+model StrategyLog {
+  id String @id @default(cuid())
+
+  strategyId String   @map("strategy_id")
+  strategy   Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+
+  message String
+  meta    Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([strategyId])
+  @@map("strategy_logs")
 }

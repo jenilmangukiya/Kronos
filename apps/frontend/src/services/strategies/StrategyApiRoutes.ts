@@ -1,0 +1,7 @@
+export const GET_STRATEGIES = "/strategies";
+export const CREATE_STRATEGY = "/strategies";
+export const GET_STRATEGY_BY_ID = (id: string) => `/strategies/${id}`;
+export const UPDATE_STRATEGY = (id: string) => `/strategies/${id}`;
+export const START_STRATEGY = (id: string) => `/strategies/${id}/start`;
+export const STOP_STRATEGY = (id: string) => `/strategies/${id}/stop`;
+export const GET_STRATEGY_LOGS = (id: string) => `/strategies/${id}/logs`;

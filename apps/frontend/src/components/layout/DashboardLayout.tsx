@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Shield, BarChart3, LogOut, User, TrendingUp, Award } from "lucide-react";
+import { LayoutDashboard, Shield, BarChart3, LogOut, User, TrendingUp, Award, Cpu } from "lucide-react";
 import { clearTokens } from "../../utils/storage";
 import { useUserProfile } from "../../services/auth/AuthQueries";
 
@@ -20,6 +20,7 @@ export const DashboardLayout: React.FC = () => {
     { label: "Option Chain", path: "/dashboard/option-chain", icon: BarChart3 },
     { label: "Futures", path: "/dashboard/futures", icon: TrendingUp },
     { label: "Paper Trading", path: "/dashboard/paper-trading", icon: Award },
+    { label: "Strategies", path: "/dashboard/strategies", icon: Cpu },
   ];
 
   return (

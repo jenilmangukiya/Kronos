@@ -10,6 +10,9 @@ import {
   OptionChain,
   LiveSubscribeRequest,
   LatestTicksResponse,
+  getFutureExpiries,
+  getFutures,
+  FuturesResponse,
 } from "./MarketDataService";
 
 export const useOptionExpiries = (
@@ -72,3 +75,30 @@ export const useLiveLatestManyTicks = (
     enabled: Boolean(brokerAccountId && tokens.length > 0) && (options?.enabled ?? true),
     ...options,
   });
+
+export const useGetFutureExpiries = (
+  symbol: string,
+  options?: Partial<UseQueryOptions<string[], AxiosError>>
+) =>
+  useQuery<string[], AxiosError>({
+    queryKey: ["market-data", "future-expiries", symbol],
+    queryFn: () => getFutureExpiries(symbol),
+    enabled: Boolean(symbol) && (options?.enabled ?? true),
+    ...options,
+  });
+
+export const useGetFutures = (
+  { brokerAccountId, symbol }: { brokerAccountId: string; symbol: string },
+  options?: Partial<UseQueryOptions<FuturesResponse, AxiosError>>
+) =>
+  useQuery<FuturesResponse, AxiosError>({
+    queryKey: ["market-data", "futures", brokerAccountId, symbol],
+    queryFn: () => getFutures(brokerAccountId, symbol),
+    enabled: Boolean(brokerAccountId && symbol) && (options?.enabled ?? true),
+    ...options,
+  });
+
+// Aliases for live hooks requested in the prompt
+export const useStartLive = useStartLiveWebSocket;
+export const useSubscribeLive = useSubscribeLiveTokens;
+export const useGetLiveLatestMany = useLiveLatestManyTicks;

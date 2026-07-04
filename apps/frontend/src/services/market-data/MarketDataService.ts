@@ -6,6 +6,8 @@ import {
   LIVE_SUBSCRIBE,
   LIVE_LATEST_MANY,
   LIVE_STOP,
+  GET_FUTURE_EXPIRIES,
+  GET_FUTURES,
 } from "./MarketDataApiRoutes";
 
 export interface OptionLeg {
@@ -134,6 +136,69 @@ export const getLatestManyTicks = async (
       brokerAccountId,
       tokens: tokens.join(","),
     },
+  });
+  return response.data;
+};
+
+export interface FutureContract {
+  token: string;
+  symbol: string;
+  name: string;
+  expiry: string;
+  lotSize: number;
+  instrumentType: string;
+  exchange: string;
+  ltp: number | null;
+  oi: number | null;
+  volume: number | null;
+  bid: number | null;
+  ask: number | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+}
+
+export interface FuturesResponse {
+  symbol: string;
+  exchange: string;
+  instrumentType: string;
+  count: number;
+  liveSubscription: {
+    tokens: {
+      exchangeType: number;
+      tokens: string[];
+    }[];
+  };
+  rows: FutureContract[];
+}
+
+export interface LiveLatestManyResponse {
+  brokerAccountId: string;
+  ticks: {
+    token: string;
+    tick: {
+      token: string;
+      sequenceNumber: string;
+      exchangeTimestamp: number;
+      ltp: number;
+    } | null;
+  }[];
+}
+
+export const getFutureExpiries = async (symbol: string): Promise<string[]> => {
+  const response = await axiosAuth.get<string[]>(GET_FUTURE_EXPIRIES, {
+    params: { symbol },
+  });
+  return response.data;
+};
+
+export const getFutures = async (
+  brokerAccountId: string,
+  symbol: string
+): Promise<FuturesResponse> => {
+  const response = await axiosAuth.get<FuturesResponse>(GET_FUTURES, {
+    params: { brokerAccountId, symbol },
   });
   return response.data;
 };

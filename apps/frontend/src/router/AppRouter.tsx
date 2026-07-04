@@ -7,6 +7,7 @@ import { Register } from "../modules/Auth/Register/Register";
 import { DashboardHome } from "../modules/Dashboard/DashboardHome/DashboardHome";
 import { BrokerSetup } from "../modules/Broker/BrokerSetup/BrokerSetup";
 import { OptionChain } from "../modules/MarketData/OptionChain/OptionChain";
+import { Futures } from "../modules/MarketData/Futures/Futures";
 import { getAccessToken } from "../utils/storage";
 
 const RootRedirect: React.FC = () => {
@@ -33,6 +34,7 @@ export const AppRouter: React.FC = () => {
           <Route index element={<DashboardHome />} />
           <Route path="broker" element={<BrokerSetup />} />
           <Route path="option-chain" element={<OptionChain />} />
+          <Route path="futures" element={<Futures />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

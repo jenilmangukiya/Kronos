@@ -5,6 +5,7 @@ import { healthRoutes } from "./health/routes.js";
 import { usersRoutes } from "./users/routes.js";
 import { brokerRoutes } from "./broker/routes.js";
 import { marketDataRoutes } from "./market-data/routes.js";
+import { paperTradingRoutes } from "./paper-trading/routes.js";
 
 export async function registerModules(app: FastifyInstance) {
   // Health
@@ -21,4 +22,7 @@ export async function registerModules(app: FastifyInstance) {
 
   // Market Data
   await app.register(marketDataRoutes);
+
+  // Paper Trading
+  await app.register(paperTradingRoutes);
 }

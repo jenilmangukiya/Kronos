@@ -5,7 +5,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "dev:fe": "pnpm --filter @kronos/frontend dev",
-    "dev:api": "turbo run dev --filter @kronos/api",
+    "dev:api": "pnpm --filter @kronos/api dev",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",

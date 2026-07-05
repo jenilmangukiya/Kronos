@@ -88,6 +88,11 @@ enum PaperInstrumentType {
   OPTION
 }
 
+enum PaperPositionSide {
+  LONG
+  SHORT
+}
+
 model PaperOrder {
   id String @id @default(cuid())
 
@@ -138,6 +143,8 @@ model PaperPosition {
   avgPrice Float @map("avg_price")
 
   status PaperPositionStatus @default(OPEN)
+
+  side PaperPositionSide @default(LONG)
 
   realizedPnl Float @default(0) @map("realized_pnl")
 

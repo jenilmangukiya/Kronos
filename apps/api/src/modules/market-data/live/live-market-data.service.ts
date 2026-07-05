@@ -9,7 +9,7 @@ interface LiveClientSession {
   userId: string;
   brokerAccountId: string;
   client: AngelWebSocketClient;
-  subscribedTokens: Set<string>;
+  subscriptions: Map<string, number>;
   lastActivityAt: number;
 }
 
@@ -89,7 +89,7 @@ class LiveMarketDataService {
       userId,
       brokerAccountId,
       client,
-      subscribedTokens: new Set<string>(),
+      subscriptions: new Map<string, number>(),
       lastActivityAt: Date.now(),
     });
 
@@ -109,12 +109,25 @@ class LiveMarketDataService {
   ) {
     const session = this.getUserSession(userId, brokerAccountId);
 
-    session.client.subscribe(tokens);
+    const tokensToActuallySubscribe: string[] = [];
 
     for (const group of tokens) {
       for (const token of group.tokens) {
-        session.subscribedTokens.add(`${group.exchangeType}:${token}`);
+        const key = this.getTokenKey(group.exchangeType, token);
+        const currentCount = session.subscriptions.get(key) ?? 0;
+
+        if (currentCount === 0) {
+          tokensToActuallySubscribe.push(key);
+        }
+
+        session.subscriptions.set(key, currentCount + 1);
       }
+    }
+
+    if (tokensToActuallySubscribe.length > 0) {
+      session.client.subscribe(
+        this.getTokenGroupsFromKeys(tokensToActuallySubscribe),
+      );
     }
 
     this.touch(brokerAccountId);
@@ -122,7 +135,7 @@ class LiveMarketDataService {
     return {
       success: true,
       brokerAccountId,
-      subscribed: Array.from(session.subscribedTokens),
+      subscribed: this.getSubscriptionList(session),
     };
   }
 
@@ -133,12 +146,26 @@ class LiveMarketDataService {
   ) {
     const session = this.getUserSession(userId, brokerAccountId);
 
-    session.client.unsubscribe(tokens);
+    const tokensToActuallyUnsubscribe: string[] = [];
 
     for (const group of tokens) {
       for (const token of group.tokens) {
-        session.subscribedTokens.delete(`${group.exchangeType}:${token}`);
+        const key = this.getTokenKey(group.exchangeType, token);
+        const currentCount = session.subscriptions.get(key) ?? 0;
+
+        if (currentCount <= 1) {
+          session.subscriptions.delete(key);
+          tokensToActuallyUnsubscribe.push(key);
+        } else {
+          session.subscriptions.set(key, currentCount - 1);
+        }
       }
+    }
+
+    if (tokensToActuallyUnsubscribe.length > 0) {
+      session.client.unsubscribe(
+        this.getTokenGroupsFromKeys(tokensToActuallyUnsubscribe),
+      );
     }
 
     this.touch(brokerAccountId);
@@ -146,7 +173,7 @@ class LiveMarketDataService {
     return {
       success: true,
       brokerAccountId,
-      subscribed: Array.from(session.subscribedTokens),
+      subscribed: this.getSubscriptionList(session),
     };
   }
 
@@ -179,7 +206,7 @@ class LiveMarketDataService {
     return {
       connected: session.client.isConnected(),
       brokerAccountId,
-      subscribed: Array.from(session.subscribedTokens),
+      subscribed: this.getSubscriptionList(session),
       lastActivityAt: new Date(session.lastActivityAt).toISOString(),
     };
   }
@@ -222,7 +249,7 @@ class LiveMarketDataService {
       sessions: Array.from(this.sessions.values()).map((session) => ({
         brokerAccountId: session.brokerAccountId,
         connected: session.client.isConnected(),
-        subscribed: Array.from(session.subscribedTokens),
+        subscribed: this.getSubscriptionList(session),
         lastActivityAt: new Date(session.lastActivityAt).toISOString(),
       })),
     };
@@ -260,6 +287,40 @@ class LiveMarketDataService {
     if (session) {
       session.lastActivityAt = Date.now();
     }
+  }
+
+  private getTokenKey(exchangeType: number, token: string) {
+    return `${exchangeType}:${token}`;
+  }
+
+  private getTokenGroupsFromKeys(keys: string[]) {
+    const grouped = new Map<number, string[]>();
+
+    for (const key of keys) {
+      const [exchangeTypeText, token] = key.split(":");
+
+      if (!exchangeTypeText || !token) continue;
+
+      const exchangeType = Number(exchangeTypeText);
+
+      const existing = grouped.get(exchangeType) ?? [];
+      existing.push(token);
+      grouped.set(exchangeType, existing);
+    }
+
+    return Array.from(grouped.entries()).map(([exchangeType, tokens]) => ({
+      exchangeType: exchangeType as 1 | 2 | 3 | 4 | 5 | 7 | 13,
+      tokens,
+    }));
+  }
+
+  private getSubscriptionList(session: LiveClientSession) {
+    return Array.from(session.subscriptions.entries()).map(
+      ([token, count]) => ({
+        token,
+        count,
+      }),
+    );
   }
 }
 

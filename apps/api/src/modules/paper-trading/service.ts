@@ -18,11 +18,35 @@ export class PaperTradingService {
       );
     }
 
-    if (input.side === "BUY") {
-      return this.buy(userId, input, price);
+    const existingPosition = await this.db.paperPosition.findFirst({
+      where: {
+        userId,
+        token: input.token,
+        status: "OPEN",
+      },
+    });
+
+    if (!existingPosition) {
+      return this.openPosition(userId, input, price);
     }
 
-    return this.sell(userId, input, price);
+    if (existingPosition.side === "LONG") {
+      if (input.side === "BUY") {
+        return this.addToPosition(userId, input, price, existingPosition);
+      }
+
+      return this.reduceLongPosition(userId, input, price, existingPosition);
+    }
+
+    if (existingPosition.side === "SHORT") {
+      if (input.side === "SELL") {
+        return this.addToPosition(userId, input, price, existingPosition);
+      }
+
+      return this.reduceShortPosition(userId, input, price, existingPosition);
+    }
+
+    throw new AppError("Invalid paper position", 400, "INVALID_PAPER_POSITION");
   }
 
   async getOrders(userId: string) {
@@ -50,7 +74,9 @@ export class PaperTradingService {
 
       const unrealizedPnl =
         position.status === "OPEN" && livePrice
-          ? (livePrice - position.avgPrice) * position.quantity
+          ? position.side === "LONG"
+            ? (livePrice - position.avgPrice) * position.quantity
+            : (position.avgPrice - livePrice) * position.quantity
           : 0;
 
       return {
@@ -98,7 +124,12 @@ export class PaperTradingService {
       );
     }
 
-    const pnl = (livePrice - position.avgPrice) * position.quantity;
+    const exitSide = position.side === "LONG" ? "SELL" : "BUY";
+
+    const pnl =
+      position.side === "LONG"
+        ? (livePrice - position.avgPrice) * position.quantity
+        : (position.avgPrice - livePrice) * position.quantity;
 
     return this.db.$transaction(async (tx) => {
       const order = await tx.paperOrder.create({
@@ -110,7 +141,7 @@ export class PaperTradingService {
           symbol: position.symbol,
           exchangeType: position.exchangeType,
           exchange: position.exchange,
-          side: "SELL",
+          side: exitSide,
           quantity: position.quantity,
           price: livePrice,
           status: "FILLED",
@@ -200,6 +231,221 @@ export class PaperTradingService {
       });
 
       return { order, position };
+    });
+  }
+
+  private async openPosition(
+    userId: string,
+    input: CreatePaperOrderInput,
+    price: number,
+  ) {
+    const positionSide = input.side === "BUY" ? "LONG" : "SHORT";
+
+    return this.db.$transaction(async (tx) => {
+      const order = await tx.paperOrder.create({
+        data: {
+          userId,
+          brokerAccountId: input.brokerAccountId,
+          instrumentType: input.instrumentType,
+          token: input.token,
+          symbol: input.symbol,
+          exchangeType: input.exchangeType,
+          exchange: input.exchange,
+          side: input.side,
+          quantity: input.quantity,
+          price,
+          status: "FILLED",
+        },
+      });
+
+      const position = await tx.paperPosition.create({
+        data: {
+          userId,
+          brokerAccountId: input.brokerAccountId,
+          instrumentType: input.instrumentType,
+          token: input.token,
+          symbol: input.symbol,
+          exchangeType: input.exchangeType,
+          exchange: input.exchange,
+          side: positionSide,
+          quantity: input.quantity,
+          avgPrice: price,
+          status: "OPEN",
+        },
+      });
+
+      return { order, position };
+    });
+  }
+
+  private async addToPosition(
+    userId: string,
+    input: CreatePaperOrderInput,
+    price: number,
+    existingPosition: {
+      id: string;
+      quantity: number;
+      avgPrice: number;
+      side: "LONG" | "SHORT";
+      realizedPnl: number;
+    },
+  ) {
+    const newQuantity = existingPosition.quantity + input.quantity;
+
+    const newAvgPrice =
+      (existingPosition.avgPrice * existingPosition.quantity +
+        price * input.quantity) /
+      newQuantity;
+
+    return this.db.$transaction(async (tx) => {
+      const order = await tx.paperOrder.create({
+        data: {
+          userId,
+          brokerAccountId: input.brokerAccountId,
+          instrumentType: input.instrumentType,
+          token: input.token,
+          symbol: input.symbol,
+          exchangeType: input.exchangeType,
+          exchange: input.exchange,
+          side: input.side,
+          quantity: input.quantity,
+          price,
+          status: "FILLED",
+        },
+      });
+
+      const position = await tx.paperPosition.update({
+        where: { id: existingPosition.id },
+        data: {
+          quantity: newQuantity,
+          avgPrice: newAvgPrice,
+        },
+      });
+
+      return { order, position };
+    });
+  }
+
+  private async reduceLongPosition(
+    userId: string,
+    input: CreatePaperOrderInput,
+    price: number,
+    existingPosition: {
+      id: string;
+      brokerAccountId: string | null;
+      instrumentType: "EQUITY" | "FUTURE" | "OPTION";
+      token: string;
+      symbol: string;
+      exchangeType: number;
+      exchange: string;
+      quantity: number;
+      avgPrice: number;
+      realizedPnl: number;
+    },
+  ) {
+    if (input.quantity > existingPosition.quantity) {
+      throw new AppError(
+        "Sell quantity cannot be greater than open long quantity",
+        400,
+        "PAPER_SELL_QUANTITY_TOO_HIGH",
+      );
+    }
+
+    const realizedPnl = (price - existingPosition.avgPrice) * input.quantity;
+    const remainingQuantity = existingPosition.quantity - input.quantity;
+
+    return this.closeOrReducePosition(
+      userId,
+      input,
+      price,
+      existingPosition,
+      realizedPnl,
+      remainingQuantity,
+    );
+  }
+
+  private async reduceShortPosition(
+    userId: string,
+    input: CreatePaperOrderInput,
+    price: number,
+    existingPosition: {
+      id: string;
+      brokerAccountId: string | null;
+      instrumentType: "EQUITY" | "FUTURE" | "OPTION";
+      token: string;
+      symbol: string;
+      exchangeType: number;
+      exchange: string;
+      quantity: number;
+      avgPrice: number;
+      realizedPnl: number;
+    },
+  ) {
+    if (input.quantity > existingPosition.quantity) {
+      throw new AppError(
+        "Buy quantity cannot be greater than open short quantity",
+        400,
+        "PAPER_BUY_QUANTITY_TOO_HIGH",
+      );
+    }
+
+    const realizedPnl = (existingPosition.avgPrice - price) * input.quantity;
+    const remainingQuantity = existingPosition.quantity - input.quantity;
+
+    return this.closeOrReducePosition(
+      userId,
+      input,
+      price,
+      existingPosition,
+      realizedPnl,
+      remainingQuantity,
+    );
+  }
+
+  private async closeOrReducePosition(
+    userId: string,
+    input: CreatePaperOrderInput,
+    price: number,
+    existingPosition: {
+      id: string;
+      quantity: number;
+      realizedPnl: number;
+    },
+    realizedPnl: number,
+    remainingQuantity: number,
+  ) {
+    return this.db.$transaction(async (tx) => {
+      const order = await tx.paperOrder.create({
+        data: {
+          userId,
+          brokerAccountId: input.brokerAccountId,
+          instrumentType: input.instrumentType,
+          token: input.token,
+          symbol: input.symbol,
+          exchangeType: input.exchangeType,
+          exchange: input.exchange,
+          side: input.side,
+          quantity: input.quantity,
+          price,
+          status: "FILLED",
+        },
+      });
+
+      const position = await tx.paperPosition.update({
+        where: { id: existingPosition.id },
+        data: {
+          quantity: remainingQuantity,
+          status: remainingQuantity === 0 ? "CLOSED" : "OPEN",
+          realizedPnl: existingPosition.realizedPnl + realizedPnl,
+          closedAt: remainingQuantity === 0 ? new Date() : null,
+        },
+      });
+
+      return {
+        order,
+        position,
+        realizedPnl,
+      };
     });
   }
 

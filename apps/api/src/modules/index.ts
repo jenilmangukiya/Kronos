@@ -7,6 +7,7 @@ import { brokerRoutes } from "./broker/routes.js";
 import { marketDataRoutes } from "./market-data/routes.js";
 import { paperTradingRoutes } from "./paper-trading/routes.js";
 import { strategyRoutes } from "./strategies/routes.js";
+import { StrategyRunnerService } from "./strategies/runner/strategy-runner.service.js";
 
 export async function registerModules(app: FastifyInstance) {
   // Health
@@ -29,4 +30,12 @@ export async function registerModules(app: FastifyInstance) {
 
   // Strategies
   await app.register(strategyRoutes);
+
+  const strategyRunnerService = new StrategyRunnerService(app);
+
+  strategyRunnerService.start();
+
+  app.addHook("onClose", async () => {
+    strategyRunnerService.stop();
+  });
 }

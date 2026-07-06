@@ -9,6 +9,7 @@ import {
 } from "../../../services/strategies/StrategyQueries";
 import { useGetPaperPositions, useGetPaperOrders } from "../../../services/paper-trading/PaperTradingQueries";
 import { useLiveLatestTick } from "../../../services/market-data/MarketDataQueries";
+import { useStrategyCandles } from "../../../services/market-data/useCandles";
 
 export const useStrategyDetails = () => {
   const { id = "" } = useParams<{ id: string }>();
@@ -20,9 +21,6 @@ export const useStrategyDetails = () => {
     isLoading: isStrategyLoading,
     error: strategyError,
   } = useGetStrategy(id);
-
-  const isRunning = strategy?.status === "RUNNING";
-
   // Poll logs every 2 seconds
   const {
     data: logs = [],
@@ -62,6 +60,13 @@ export const useStrategyDetails = () => {
     retry: false,
   });
 
+  const {
+    data: candles = [],
+    isLoading: isCandlesLoading,
+    isFetching: isCandlesFetching,
+    error: candlesError,
+  } = useStrategyCandles(strategy);
+
   const startMutation = useStartStrategy();
   const stopMutation = useStopStrategy();
 
@@ -73,6 +78,11 @@ export const useStrategyDetails = () => {
     if (brokerAccountId && underlyingToken) {
       queryClient.invalidateQueries({
         queryKey: ["market-data", "live-latest", brokerAccountId, underlyingToken],
+      });
+    }
+    if (strategy?.id) {
+      queryClient.invalidateQueries({
+        queryKey: ["market-data", "strategy-candles", strategy.id],
       });
     }
   };
@@ -123,5 +133,9 @@ export const useStrategyDetails = () => {
     handleStart,
     handleStop,
     isActionLoading: startMutation.isPending || stopMutation.isPending,
+    candles,
+    isCandlesLoading,
+    isCandlesFetching,
+    candlesError,
   };
 };

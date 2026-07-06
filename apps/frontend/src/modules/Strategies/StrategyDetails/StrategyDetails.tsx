@@ -18,6 +18,7 @@ import { Spinner } from "../../../components/ui/Spinner";
 import { Card } from "../../../components/ui/Card";
 import { Badge } from "../../../components/ui/Badge";
 import { formatCurrency, formatDate } from "../../../utils/format";
+import { CandleChart } from "../../../components/charts/CandleChart";
 import {
   formatStrategyType,
   formatRuleType,
@@ -40,6 +41,10 @@ export const StrategyDetails: React.FC = () => {
     handleStart,
     handleStop,
     isActionLoading,
+    candles,
+    isCandlesLoading,
+    isCandlesFetching,
+    candlesError,
   } = useStrategyDetails();
 
   const [isConfigExpanded, setIsConfigExpanded] = useState(false);
@@ -305,13 +310,52 @@ export const StrategyDetails: React.FC = () => {
           </div>
         </Card>
 
-        {/* 8. Candle Chart Placeholder */}
-        <Card className="border-slate-800 bg-slate-900/40 p-6 flex flex-col justify-center items-center text-center space-y-3">
-          <LineChart className="h-10 w-10 text-slate-500 animate-pulse" />
-          <h4 className="text-md font-bold text-slate-300">Candle Chart Coming Next</h4>
-          <p className="text-slate-500 text-xs max-w-xs leading-relaxed">
-            Live candles and entry/exit markers will be added in the next step.
-          </p>
+        {/* 8. Candle Chart Card */}
+        <Card className="border-slate-800 bg-slate-900/40 p-6 flex flex-col space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+            <div>
+              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                <LineChart className="h-5 w-5 text-indigo-400" />
+                {strategy.trade?.symbol || "Strategy"} 5m Candles
+              </h3>
+              <p className="text-slate-500 text-xs mt-0.5">
+                Refreshing every 30 seconds
+              </p>
+            </div>
+            {isCandlesFetching && (
+              <span className="flex items-center gap-1.5 text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 font-semibold uppercase tracking-wider">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-ping" />
+                Updating
+              </span>
+            )}
+          </div>
+
+          {!strategy.trade?.token ? (
+            <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
+              <AlertCircle className="h-8 w-8 text-slate-500" />
+              <span>Select a trade instrument to view candles</span>
+            </div>
+          ) : !strategy.brokerAccountId ? (
+            <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
+              <AlertCircle className="h-8 w-8 text-slate-500" />
+              <span>Connect broker account to view candles</span>
+            </div>
+          ) : candlesError && !(isCandlesLoading || (isCandlesFetching && candles.length === 0)) ? (
+            <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-rose-400 text-xs space-y-2">
+              <AlertCircle className="h-8 w-8 text-rose-500/80" />
+              <span>Unable to load candle data</span>
+              <span className="text-[10px] text-slate-500 mt-1 max-w-xs text-center truncate px-4">
+                {candlesError?.message || String(candlesError)}
+              </span>
+            </div>
+          ) : (
+            <CandleChart
+              candles={candles}
+              isLoading={isCandlesLoading || (isCandlesFetching && candles.length === 0)}
+              height={300}
+              emptyMessage="No candle data available yet"
+            />
+          )}
         </Card>
       </div>
 

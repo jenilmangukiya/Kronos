@@ -6,6 +6,9 @@ import {
   UPDATE_STRATEGY,
   START_STRATEGY,
   STOP_STRATEGY,
+  STOP_EXIT_STRATEGY,
+  RESET_STRATEGY,
+  DUPLICATE_STRATEGY,
   GET_STRATEGY_LOGS,
 } from "./StrategyApiRoutes";
 
@@ -108,6 +111,21 @@ export const startStrategy = async (id: string): Promise<Strategy> => {
 
 export const stopStrategy = async (id: string): Promise<Strategy> => {
   const response = await axiosAuth.post<Strategy>(STOP_STRATEGY(id));
+  return response.data;
+};
+
+export const stopAndExitStrategy = async (id: string): Promise<{ strategy: Strategy; exitResult?: any }> => {
+  const response = await axiosAuth.post<{ strategy: Strategy; exitResult?: any }>(STOP_EXIT_STRATEGY(id));
+  return response.data;
+};
+
+export const resetStrategy = async (id: string): Promise<Strategy> => {
+  const response = await axiosAuth.post<Strategy>(RESET_STRATEGY(id));
+  return response.data;
+};
+
+export const duplicateStrategy = async (id: string): Promise<Strategy> => {
+  const response = await axiosAuth.post<Strategy>(DUPLICATE_STRATEGY(id));
   return response.data;
 };
 

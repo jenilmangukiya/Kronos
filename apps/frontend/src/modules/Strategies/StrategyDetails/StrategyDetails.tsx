@@ -41,7 +41,14 @@ export const StrategyDetails: React.FC = () => {
     setActionError,
     handleStart,
     handleStop,
-    isActionLoading,
+    handleStopExit,
+    handleReset,
+    handleDuplicate,
+    isStartLoading,
+    isStopLoading,
+    isStopExitLoading,
+    isResetLoading,
+    isDuplicateLoading,
     candles,
     isCandlesLoading,
     isCandlesFetching,
@@ -336,9 +343,17 @@ export const StrategyDetails: React.FC = () => {
         {/* Action Buttons */}
         <StrategyActions
           strategy={strategy}
+          hasOpenPosition={!!openPosition}
           onStart={handleStart}
           onStop={handleStop}
-          isActionLoading={isActionLoading}
+          onStopExit={handleStopExit}
+          onReset={handleReset}
+          onDuplicate={handleDuplicate}
+          isStartLoading={isStartLoading}
+          isStopLoading={isStopLoading}
+          isStopExitLoading={isStopExitLoading}
+          isResetLoading={isResetLoading}
+          isDuplicateLoading={isDuplicateLoading}
         />
       </div>
 

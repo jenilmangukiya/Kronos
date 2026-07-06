@@ -11,6 +11,10 @@ interface StrategyLogsProps {
 
 const getLogMessageColor = (message: string): string => {
   const msg = message.toLowerCase();
+  if (msg.includes("manual stop and exit executed")) return "text-yellow-400 font-semibold";
+  if (msg.includes("manual stop executed")) return "text-amber-400 font-semibold";
+  if (msg.includes("strategy reset")) return "text-slate-400";
+  if (msg.includes("strategy duplicated")) return "text-blue-400 font-semibold";
   if (msg.includes("strategy started")) return "text-blue-400";
   if (msg.includes("live market data subscribed")) return "text-cyan-400";
   if (

@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -6,6 +6,9 @@ import {
   useGetStrategyLogs,
   useStartStrategy,
   useStopStrategy,
+  useStopAndExitStrategy,
+  useResetStrategy,
+  useDuplicateStrategy,
 } from "../../../services/strategies/StrategyQueries";
 import { useGetPaperPositions, useGetPaperOrders } from "../../../services/paper-trading/PaperTradingQueries";
 import { useLiveLatestTick } from "../../../services/market-data/MarketDataQueries";
@@ -67,10 +70,16 @@ export const useStrategyDetails = () => {
     error: candlesError,
   } = useStrategyCandles(strategy);
 
+  const navigate = useNavigate();
+
   const startMutation = useStartStrategy();
   const stopMutation = useStopStrategy();
+  const stopExitMutation = useStopAndExitStrategy();
+  const resetMutation = useResetStrategy();
+  const duplicateMutation = useDuplicateStrategy();
 
   const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["strategies"] });
     queryClient.invalidateQueries({ queryKey: ["strategies", id] });
     queryClient.invalidateQueries({ queryKey: ["strategies", id, "logs"] });
     queryClient.invalidateQueries({ queryKey: ["paper-trading", "positions"] });
@@ -109,6 +118,51 @@ export const useStrategyDetails = () => {
     }
   };
 
+  const handleStopExit = async () => {
+    if (!id) return;
+    if (!window.confirm("Stop strategy and exit open position?")) {
+      return;
+    }
+    try {
+      setActionError(null);
+      await stopExitMutation.mutateAsync(id);
+      invalidateAll();
+    } catch (err: any) {
+      setActionError(err?.response?.data?.message || err?.message || "Failed to stop strategy and exit position");
+    }
+  };
+
+  const handleReset = async () => {
+    if (!id) return;
+    if (!window.confirm("Reset strategy? This will clear last trigger state but will not delete orders or positions.")) {
+      return;
+    }
+    try {
+      setActionError(null);
+      await resetMutation.mutateAsync(id);
+      invalidateAll();
+    } catch (err: any) {
+      setActionError(err?.response?.data?.message || err?.message || "Failed to reset strategy");
+    }
+  };
+
+  const handleDuplicate = async () => {
+    if (!id) return;
+    if (!window.confirm("Create a copy of this strategy?")) {
+      return;
+    }
+    try {
+      setActionError(null);
+      const newStrategy = await duplicateMutation.mutateAsync(id);
+      invalidateAll();
+      if (newStrategy && newStrategy.id) {
+        navigate(`/dashboard/strategies/${newStrategy.id}`);
+      }
+    } catch (err: any) {
+      setActionError(err?.response?.data?.message || err?.message || "Failed to duplicate strategy");
+    }
+  };
+
   const isLoading = isStrategyLoading;
   const error = strategyError
     ? ((strategyError as any).response?.data?.message || (strategyError as any).message)
@@ -132,7 +186,20 @@ export const useStrategyDetails = () => {
     setActionError,
     handleStart,
     handleStop,
-    isActionLoading: startMutation.isPending || stopMutation.isPending,
+    handleStopExit,
+    handleReset,
+    handleDuplicate,
+    isStartLoading: startMutation.isPending,
+    isStopLoading: stopMutation.isPending,
+    isStopExitLoading: stopExitMutation.isPending,
+    isResetLoading: resetMutation.isPending,
+    isDuplicateLoading: duplicateMutation.isPending,
+    isActionLoading:
+      startMutation.isPending ||
+      stopMutation.isPending ||
+      stopExitMutation.isPending ||
+      resetMutation.isPending ||
+      duplicateMutation.isPending,
     candles,
     isCandlesLoading,
     isCandlesFetching,

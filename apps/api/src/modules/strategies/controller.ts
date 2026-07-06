@@ -57,6 +57,30 @@ export class StrategyController {
     return this.strategyService.stop(userId, strategyId);
   }
 
+  async stopAndExit(userId: string | undefined, strategyId: string) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.strategyService.stopAndExit(userId, strategyId);
+  }
+
+  async reset(userId: string | undefined, strategyId: string) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.strategyService.reset(userId, strategyId);
+  }
+
+  async duplicate(userId: string | undefined, strategyId: string) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.strategyService.duplicate(userId, strategyId);
+  }
+
   async getLogs(userId: string | undefined, strategyId: string) {
     if (!userId) {
       throw new AppError("Unauthorized", 401, "UNAUTHORIZED");

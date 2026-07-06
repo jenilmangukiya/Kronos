@@ -134,6 +134,63 @@ export async function strategyRoutes(app: FastifyInstance) {
     },
   );
 
+  typedApp.post(
+    "/strategies/:id/stop-exit",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Strategies"],
+        summary: "Stop strategy and exit position",
+        security: [{ bearerAuth: [] }],
+        params: strategyParamsSchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return strategyController.stopAndExit(request.user?.id, request.params.id);
+    },
+  );
+
+  typedApp.post(
+    "/strategies/:id/reset",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Strategies"],
+        summary: "Reset strategy",
+        security: [{ bearerAuth: [] }],
+        params: strategyParamsSchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return strategyController.reset(request.user?.id, request.params.id);
+    },
+  );
+
+  typedApp.post(
+    "/strategies/:id/duplicate",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Strategies"],
+        summary: "Duplicate strategy",
+        security: [{ bearerAuth: [] }],
+        params: strategyParamsSchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return strategyController.duplicate(request.user?.id, request.params.id);
+    },
+  );
+
   typedApp.get(
     "/strategies/:id/logs",
     {

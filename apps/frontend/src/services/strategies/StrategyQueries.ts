@@ -7,6 +7,9 @@ import {
   updateStrategy,
   startStrategy,
   stopStrategy,
+  stopAndExitStrategy,
+  resetStrategy,
+  duplicateStrategy,
   getStrategyLogs,
   Strategy,
   CreateStrategyRequest,
@@ -98,6 +101,62 @@ export const useStopStrategy = (
       queryClient.invalidateQueries({ queryKey: ["strategies"] });
       queryClient.invalidateQueries({ queryKey: ["strategies", id] });
       queryClient.invalidateQueries({ queryKey: ["strategies", id, "logs"] });
+      if (options?.onSuccess) {
+        (options.onSuccess as any)(data, variables, context);
+      }
+    },
+    ...options,
+  });
+};
+
+export const useStopAndExitStrategy = (
+  options?: UseMutationOptions<{ strategy: Strategy; exitResult?: any }, AxiosError, string>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation<{ strategy: Strategy; exitResult?: any }, AxiosError, string>({
+    mutationFn: stopAndExitStrategy,
+    onSuccess: (data, variables, context) => {
+      const id = variables;
+      queryClient.invalidateQueries({ queryKey: ["strategies"] });
+      queryClient.invalidateQueries({ queryKey: ["strategies", id] });
+      queryClient.invalidateQueries({ queryKey: ["strategies", id, "logs"] });
+      queryClient.invalidateQueries({ queryKey: ["paper-trading", "positions"] });
+      queryClient.invalidateQueries({ queryKey: ["paper-trading", "orders"] });
+      if (options?.onSuccess) {
+        (options.onSuccess as any)(data, variables, context);
+      }
+    },
+    ...options,
+  });
+};
+
+export const useResetStrategy = (
+  options?: UseMutationOptions<Strategy, AxiosError, string>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation<Strategy, AxiosError, string>({
+    mutationFn: resetStrategy,
+    onSuccess: (data, variables, context) => {
+      const id = variables;
+      queryClient.invalidateQueries({ queryKey: ["strategies"] });
+      queryClient.invalidateQueries({ queryKey: ["strategies", id] });
+      queryClient.invalidateQueries({ queryKey: ["strategies", id, "logs"] });
+      if (options?.onSuccess) {
+        (options.onSuccess as any)(data, variables, context);
+      }
+    },
+    ...options,
+  });
+};
+
+export const useDuplicateStrategy = (
+  options?: UseMutationOptions<Strategy, AxiosError, string>
+) => {
+  const queryClient = useQueryClient();
+  return useMutation<Strategy, AxiosError, string>({
+    mutationFn: duplicateStrategy,
+    onSuccess: (data, variables, context) => {
+      queryClient.invalidateQueries({ queryKey: ["strategies"] });
       if (options?.onSuccess) {
         (options.onSuccess as any)(data, variables, context);
       }

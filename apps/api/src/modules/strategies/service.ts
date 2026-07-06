@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { AppError } from "../../errors/app-error.js";
 import type { CreateStrategyInput, UpdateStrategyInput } from "./types.js";
 import { liveMarketDataService } from "../market-data/live/live-market-data.service.js";
+import { PaperTradingService } from "../paper-trading/service.js";
 
 export class StrategyService {
   constructor(
@@ -209,6 +210,103 @@ export class StrategyService {
     await this.addLog(strategy.id, "Strategy stopped");
 
     return updated;
+  }
+
+  async stopAndExit(userId: string, strategyId: string) {
+    const strategy = await this.getById(userId, strategyId);
+
+    const openPosition = await this.db.paperPosition.findFirst({
+      where: {
+        userId,
+        strategyId: strategy.id,
+        status: "OPEN",
+      },
+    });
+
+    let exitResult = null;
+    if (openPosition) {
+      const paperTradingService = new PaperTradingService(this.db);
+      exitResult = await paperTradingService.exitPosition(userId, openPosition.id, {});
+      await this.addLog(strategy.id, "Manual stop and exit executed");
+    } else {
+      await this.addLog(strategy.id, "Manual stop executed, no open position found");
+    }
+
+    const updated = await this.stop(userId, strategyId);
+
+    return {
+      strategy: updated,
+      exitResult,
+    };
+  }
+
+  async reset(userId: string, strategyId: string) {
+    const strategy = await this.getById(userId, strategyId);
+
+    if (strategy.brokerAccountId) {
+      const rules = strategy.rules as {
+        underlyingToken: string;
+        underlyingExchangeType: number;
+      };
+
+      const trade = strategy.trade as {
+        token: string;
+        exchangeType: number;
+      };
+
+      try {
+        liveMarketDataService.unsubscribe(userId, strategy.brokerAccountId, [
+          {
+            exchangeType: rules.underlyingExchangeType as any,
+            tokens: [rules.underlyingToken],
+          },
+          {
+            exchangeType: trade.exchangeType as any,
+            tokens: [trade.token],
+          },
+        ]);
+        await this.addLog(strategy.id, "Live market data unsubscribed");
+      } catch {
+        // Ignore unsubscribe error during reset
+      }
+    }
+
+    const updated = await this.db.strategy.update({
+      where: { id: strategy.id },
+      data: {
+        status: "STOPPED",
+        lastTriggeredAt: null,
+      },
+    });
+
+    await this.addLog(strategy.id, "Strategy reset");
+
+    return updated;
+  }
+
+  async duplicate(userId: string, strategyId: string) {
+    const strategy = await this.getById(userId, strategyId);
+
+    const duplicated = await this.db.strategy.create({
+      data: {
+        userId,
+        brokerAccountId: strategy.brokerAccountId,
+        name: strategy.name + " Copy",
+        symbol: strategy.symbol,
+        strategyType: strategy.strategyType,
+        instrumentType: strategy.instrumentType,
+        mode: strategy.mode,
+        rules: strategy.rules ?? {},
+        trade: strategy.trade ?? {},
+        risk: strategy.risk ?? {},
+        status: "STOPPED",
+        lastTriggeredAt: null,
+      },
+    });
+
+    await this.addLog(duplicated.id, "Strategy duplicated");
+
+    return duplicated;
   }
 
   async getLogs(userId: string, strategyId: string) {

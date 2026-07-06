@@ -2,9 +2,13 @@ import type { FastifyInstance } from "fastify";
 
 import { AppError } from "../../errors/app-error.js";
 import type { CreateStrategyInput, UpdateStrategyInput } from "./types.js";
+import { liveMarketDataService } from "../market-data/live/live-market-data.service.js";
 
 export class StrategyService {
-  constructor(private readonly db: FastifyInstance["db"]) {}
+  constructor(
+    private readonly app: FastifyInstance,
+    private readonly db: FastifyInstance["db"],
+  ) {}
 
   async create(userId: string, input: CreateStrategyInput) {
     if (input.mode === "LIVE") {
@@ -21,6 +25,7 @@ export class StrategyService {
         brokerAccountId: input.brokerAccountId,
         name: input.name,
         symbol: input.symbol,
+        strategyType: input.strategyType ?? "PRICE_BREAKOUT",
         instrumentType: input.instrumentType,
         mode: input.mode,
         status: "STOPPED",
@@ -88,6 +93,48 @@ export class StrategyService {
       );
     }
 
+    if (!strategy.brokerAccountId) {
+      throw new AppError(
+        "Broker account is required to start strategy",
+        400,
+        "STRATEGY_BROKER_ACCOUNT_REQUIRED",
+      );
+    }
+
+    const rules = strategy.rules as {
+      underlyingToken: string;
+      underlyingExchangeType: number;
+    };
+
+    const trade = strategy.trade as {
+      token: string;
+      exchangeType: number;
+    };
+
+    await liveMarketDataService.start(
+      this.app,
+      userId,
+      strategy.brokerAccountId,
+    );
+
+    liveMarketDataService.subscribe(userId, strategy.brokerAccountId, [
+      {
+        exchangeType: rules.underlyingExchangeType as
+          | 1
+          | 2
+          | 3
+          | 4
+          | 5
+          | 7
+          | 13,
+        tokens: [rules.underlyingToken],
+      },
+      {
+        exchangeType: trade.exchangeType as 1 | 2 | 3 | 4 | 5 | 7 | 13,
+        tokens: [trade.token],
+      },
+    ]);
+
     const updated = await this.db.strategy.update({
       where: { id: strategy.id },
       data: {
@@ -96,6 +143,10 @@ export class StrategyService {
     });
 
     await this.addLog(strategy.id, "Strategy started");
+    await this.addLog(strategy.id, "Live market data subscribed", {
+      underlyingToken: rules.underlyingToken,
+      tradeToken: trade.token,
+    });
 
     return updated;
   }
@@ -109,6 +160,42 @@ export class StrategyService {
         status: "STOPPED",
       },
     });
+
+    if (strategy.brokerAccountId) {
+      const rules = strategy.rules as {
+        underlyingToken: string;
+        underlyingExchangeType: number;
+      };
+
+      const trade = strategy.trade as {
+        token: string;
+        exchangeType: number;
+      };
+
+      try {
+        liveMarketDataService.unsubscribe(userId, strategy.brokerAccountId, [
+          {
+            exchangeType: rules.underlyingExchangeType as
+              | 1
+              | 2
+              | 3
+              | 4
+              | 5
+              | 7
+              | 13,
+            tokens: [rules.underlyingToken],
+          },
+          {
+            exchangeType: trade.exchangeType as 1 | 2 | 3 | 4 | 5 | 7 | 13,
+            tokens: [trade.token],
+          },
+        ]);
+
+        await this.addLog(strategy.id, "Live market data unsubscribed");
+      } catch {
+        await this.addLog(strategy.id, "Live unsubscribe skipped");
+      }
+    }
 
     await this.addLog(strategy.id, "Strategy stopped");
 

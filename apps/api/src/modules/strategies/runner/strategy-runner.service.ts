@@ -1,24 +1,8 @@
 import type { FastifyInstance } from "fastify";
 
-import { liveTickStore } from "../../market-data/live/live-tick.store.js";
 import { PaperTradingService } from "../../paper-trading/service.js";
-
-interface StrategyRules {
-  type: "UNDERLYING_CROSS_ABOVE" | "UNDERLYING_CROSS_BELOW";
-  underlyingToken: string;
-  underlyingExchangeType: number;
-  triggerPrice: number;
-}
-
-interface StrategyTrade {
-  instrumentType: "EQUITY" | "FUTURE" | "OPTION";
-  token: string;
-  symbol: string;
-  exchangeType: number;
-  exchange: string;
-  side: "BUY" | "SELL";
-  quantity: number;
-}
+import { strategyRegistry } from "./strategy-registry.js";
+import type { StrategyTrade } from "./handlers/types.js";
 
 export class StrategyRunnerService {
   private interval: NodeJS.Timeout | null = null;
@@ -80,42 +64,39 @@ export class StrategyRunnerService {
     userId: string;
     brokerAccountId: string | null;
     name: string;
+    strategyType: string;
     rules: unknown;
     trade: unknown;
   }) {
-    const rules = strategy.rules as StrategyRules;
-    const trade = strategy.trade as StrategyTrade;
+    const handler = strategyRegistry.get(strategy.strategyType);
 
-    if (!strategy.brokerAccountId) {
-      await this.addLog(strategy.id, "Skipped: broker account missing");
-      return;
-    }
-
-    const tick = liveTickStore.getTick(
-      strategy.brokerAccountId,
-      rules.underlyingToken,
-    );
-
-    if (!tick) {
-      await this.addLog(strategy.id, "Waiting for live underlying tick", {
-        token: rules.underlyingToken,
+    if (!handler) {
+      await this.addLog(strategy.id, "No handler found for strategy type", {
+        strategyType: strategy.strategyType,
       });
       return;
     }
 
-    const ltp = tick.ltp;
+    const decision = await handler.evaluate({
+      app: this.app,
+      strategy,
+    });
 
-    const matched = this.isRuleMatched(rules, ltp);
-
-    if (!matched) {
+    if (!decision.shouldExecute) {
       return;
     }
 
-    await this.addLog(strategy.id, "Entry condition matched", {
-      ruleType: rules.type,
-      triggerPrice: rules.triggerPrice,
-      ltp,
-    });
+    await this.addLog(strategy.id, decision.reason, decision.meta);
+
+    if (!strategy.brokerAccountId) {
+      await this.addLog(
+        strategy.id,
+        "Skipped execution: broker account missing",
+      );
+      return;
+    }
+
+    const trade = strategy.trade as StrategyTrade;
 
     const paperTradingService = new PaperTradingService(this.app.db);
 
@@ -142,18 +123,6 @@ export class StrategyRunnerService {
     await this.addLog(strategy.id, "Paper order executed", {
       orderResult,
     });
-  }
-
-  private isRuleMatched(rules: StrategyRules, ltp: number) {
-    if (rules.type === "UNDERLYING_CROSS_ABOVE") {
-      return ltp >= rules.triggerPrice;
-    }
-
-    if (rules.type === "UNDERLYING_CROSS_BELOW") {
-      return ltp <= rules.triggerPrice;
-    }
-
-    return false;
   }
 
   private async addLog(strategyId: string, message: string, meta?: unknown) {

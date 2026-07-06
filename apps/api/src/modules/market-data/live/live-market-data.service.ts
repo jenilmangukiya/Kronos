@@ -31,6 +31,12 @@ class LiveMarketDataService {
       };
     }
 
+    if (existingSession && !existingSession.client.isConnected()) {
+      existingSession.client.close();
+      this.sessions.delete(brokerAccountId);
+      liveTickStore.clearBroker(brokerAccountId);
+    }
+
     const brokerAccount = await app.db.brokerAccount.findFirst({
       where: {
         id: brokerAccountId,
@@ -85,6 +91,8 @@ class LiveMarketDataService {
       feedToken: brokerAccount.feedToken,
     });
 
+    await client.connect();
+
     this.sessions.set(brokerAccountId, {
       userId,
       brokerAccountId,
@@ -93,11 +101,9 @@ class LiveMarketDataService {
       lastActivityAt: Date.now(),
     });
 
-    client.connect();
-
     return {
       success: true,
-      message: "Angel WebSocket connecting",
+      message: "Angel WebSocket connected",
       brokerAccountId,
     };
   }

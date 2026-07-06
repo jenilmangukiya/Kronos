@@ -13,7 +13,7 @@ import {
 export async function strategyRoutes(app: FastifyInstance) {
   const typedApp = app.withTypeProvider<ZodTypeProvider>();
 
-  const strategyService = new StrategyService(app.db);
+  const strategyService = new StrategyService(app, app.db);
   const strategyController = new StrategyController(strategyService);
 
   typedApp.post(

@@ -187,6 +187,8 @@ model Strategy {
 
   symbol String
 
+  strategyType String @default("PRICE_BREAKOUT") @map("strategy_type")
+
   instrumentType StrategyInstrumentType @map("instrument_type")
 
   mode StrategyMode @default(PAPER)

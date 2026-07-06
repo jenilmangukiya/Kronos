@@ -75,7 +75,9 @@ export const ExitPositionDialog: React.FC<ExitPositionDialogProps> = ({
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 mb-4">
-          <h3 className="text-lg font-bold text-slate-100">Exit Paper Position</h3>
+          <h3 className="text-lg font-bold text-slate-100">
+            {position.side ? `Exit ${position.side} position?` : "Exit Paper Position"}
+          </h3>
           <button 
             onClick={onClose} 
             className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer"

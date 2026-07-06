@@ -45,6 +45,9 @@ export const PaperTradingDashboard: React.FC = () => {
           <p className="text-slate-400 text-sm mt-1">
             Simulate trades, practice strategies, and view virtual profits in real-time.
           </p>
+          <p className="text-slate-500 text-xs mt-1.5 font-medium italic">
+            * Buy opens/increases a long position. Sell opens/increases a short position if no long position exists.
+          </p>
         </div>
 
         <div className="flex items-center gap-3">

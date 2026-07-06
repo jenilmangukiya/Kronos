@@ -112,8 +112,9 @@ export const PaperTradeButtons: React.FC<PaperTradeButtonsProps> = ({
         </div>
 
         {/* Small quantity badge/editor on hover or small indicator */}
-        <div className="text-[9px] text-slate-500 font-semibold font-mono">
-          Q: {quantity}
+        <div className="text-[9px] text-slate-500 font-semibold font-mono flex items-center gap-1">
+          <span className="text-[8px] bg-slate-800 text-slate-400 px-1 rounded uppercase tracking-wider select-none font-bold">Paper</span>
+          <span>Q: {quantity}</span>
         </div>
 
         {/* Temporary floating notification near the cell */}
@@ -181,7 +182,7 @@ export const PaperTradeButtons: React.FC<PaperTradeButtonsProps> = ({
           variant="primary"
           className="!bg-gradient-to-r !from-emerald-600 !to-teal-600 hover:!from-emerald-500 hover:!to-teal-500 !text-white border-none py-1 px-3 text-xs font-bold !shadow-md !shadow-emerald-950/20"
         >
-          Buy
+          Buy / Long
         </Button>
         <Button
           onClick={() => handleOrder("SELL")}
@@ -189,7 +190,7 @@ export const PaperTradeButtons: React.FC<PaperTradeButtonsProps> = ({
           variant="danger"
           className="!bg-gradient-to-r !from-rose-600 !to-red-600 hover:!from-rose-500 hover:!to-red-500 !text-white border-none py-1 px-3 text-xs font-bold !shadow-md !shadow-rose-950/20"
         >
-          Sell
+          Sell / Short
         </Button>
       </div>
 

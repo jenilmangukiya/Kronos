@@ -43,6 +43,7 @@ export interface PaperPosition {
   userId: string;
   brokerAccountId?: string | null;
   instrumentType: PaperInstrumentType;
+  side: "LONG" | "SHORT";
   token: string;
   symbol: string;
   exchangeType: number;

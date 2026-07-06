@@ -22,7 +22,7 @@ export const useOptionChain = () => {
 
   const [symbol, setSymbol] = useState("NIFTY");
   const [expiry, setExpiry] = useState("");
-  const [strikeRange, setStrikeRange] = useState(10);
+  const [strikeRange, setStrikeRange] = useState(5);
 
   const { data: expiries, isLoading: isLoadingExpiries } = useOptionExpiries(symbol);
 

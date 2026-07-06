@@ -9,6 +9,8 @@ export class StrategyRunnerService {
   private interval: NodeJS.Timeout | null = null;
   private isRunning = false;
 
+  private readonly dailyLimitLogged = new Map<string, string>();
+
   constructor(private readonly app: FastifyInstance) {}
 
   start() {
@@ -84,6 +86,7 @@ export class StrategyRunnerService {
 
     await this.evaluateEntry(strategy);
   }
+
   private async evaluateEntry(strategy: {
     id: string;
     userId: string;
@@ -92,7 +95,25 @@ export class StrategyRunnerService {
     strategyType: string;
     rules: unknown;
     trade: unknown;
+    risk: unknown;
   }) {
+    const tradeLimit = await this.canTakeEntryToday(strategy);
+
+    if (!tradeLimit.allowed) {
+      const todayKey = this.getTodayKey(strategy.id);
+
+      if (!this.dailyLimitLogged.has(todayKey)) {
+        await this.addLog(strategy.id, "Max trades reached for today", {
+          todayEntryCount: tradeLimit.todayEntryCount,
+          maxTradesPerDay: tradeLimit.maxTradesPerDay,
+        });
+
+        this.dailyLimitLogged.set(todayKey, "logged");
+      }
+
+      return;
+    }
+
     const handler = strategyRegistry.get(strategy.strategyType);
 
     if (!handler) {
@@ -277,5 +298,65 @@ export class StrategyRunnerService {
         meta: meta ?? {},
       },
     });
+  }
+
+  private getTodayRange() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+
+    return { start, end };
+  }
+
+  private async getTodayEntryCount(
+    strategyId: string,
+    entrySide: "BUY" | "SELL",
+  ) {
+    const { start, end } = this.getTodayRange();
+
+    return this.app.db.paperOrder.count({
+      where: {
+        strategyId,
+        side: entrySide,
+        createdAt: {
+          gte: start,
+          lte: end,
+        },
+      },
+    });
+  }
+
+  private async canTakeEntryToday(strategy: {
+    id: string;
+    risk: unknown;
+    trade: unknown;
+  }) {
+    const risk = strategy.risk as {
+      maxTradesPerDay?: number;
+    };
+
+    const trade = strategy.trade as {
+      side: "BUY" | "SELL";
+    };
+
+    const maxTradesPerDay = risk.maxTradesPerDay ?? 1;
+
+    const todayEntryCount = await this.getTodayEntryCount(
+      strategy.id,
+      trade.side,
+    );
+
+    return {
+      allowed: todayEntryCount < maxTradesPerDay,
+      todayEntryCount,
+      maxTradesPerDay,
+    };
+  }
+
+  private getTodayKey(strategyId: string) {
+    const today = new Date().toISOString().slice(0, 10);
+    return `${strategyId}:${today}`;
   }
 }

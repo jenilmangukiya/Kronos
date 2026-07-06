@@ -7,6 +7,8 @@ import {
   stopLiveWebSocket,
   subscribeLiveTokens,
   getLatestManyTicks,
+  getLiveLatestTick,
+  LiveLatestTickResponse,
   OptionChain,
   LiveSubscribeRequest,
   LatestTicksResponse,
@@ -95,6 +97,18 @@ export const useGetFutures = (
     queryKey: ["market-data", "futures", brokerAccountId, symbol],
     queryFn: () => getFutures(brokerAccountId, symbol),
     enabled: Boolean(brokerAccountId && symbol) && (options?.enabled ?? true),
+    ...options,
+  });
+
+export const useLiveLatestTick = (
+  brokerAccountId: string,
+  token: string,
+  options?: Partial<UseQueryOptions<LiveLatestTickResponse, AxiosError>>
+) =>
+  useQuery<LiveLatestTickResponse, AxiosError>({
+    queryKey: ["market-data", "live-latest", brokerAccountId, token],
+    queryFn: () => getLiveLatestTick(brokerAccountId, token),
+    enabled: Boolean(brokerAccountId && token) && (options?.enabled ?? true),
     ...options,
   });
 

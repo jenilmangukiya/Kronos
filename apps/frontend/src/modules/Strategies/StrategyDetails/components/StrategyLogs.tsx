@@ -8,6 +8,33 @@ interface StrategyLogsProps {
   isPolling: boolean;
 }
 
+const getLogMessageColor = (message: string): string => {
+  const msg = message.toLowerCase();
+  if (msg.includes("strategy started")) return "text-blue-400";
+  if (msg.includes("live market data subscribed")) return "text-cyan-400";
+  if (
+    msg.includes("entry paper order executed") ||
+    msg.includes("paper order executed") ||
+    msg.includes("target hit")
+  ) {
+    return "text-emerald-400 font-semibold";
+  }
+  if (msg.includes("stop loss hit")) return "text-rose-400 font-semibold";
+  if (msg.includes("max trades reached")) return "text-amber-400 font-semibold";
+  if (msg.includes("strategy stopped")) return "text-slate-400";
+  if (
+    msg.includes("error") ||
+    msg.includes("failed") ||
+    msg.includes("disconnected") ||
+    msg.includes("expired") ||
+    msg.includes("exception") ||
+    msg.includes("skipped")
+  ) {
+    return "text-rose-500 font-semibold";
+  }
+  return "text-slate-300";
+};
+
 export const StrategyLogs: React.FC<StrategyLogsProps> = ({ logs, isPolling }) => {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
@@ -60,7 +87,9 @@ export const StrategyLogs: React.FC<StrategyLogsProps> = ({ logs, isPolling }) =
                     }`}
                   >
                     <span className="text-indigo-400/90 font-semibold select-none">[{timestamp}]</span>
-                    <span className="text-slate-300 flex-1 break-all">{log.message}</span>
+                    <span className={`flex-1 break-all ${getLogMessageColor(log.message)}`}>
+                      {log.message}
+                    </span>
                     {hasMeta && (
                       <span className="text-slate-500 hover:text-slate-300">
                         {isExpanded ? (

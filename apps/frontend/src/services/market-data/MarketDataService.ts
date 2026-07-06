@@ -5,6 +5,7 @@ import {
   LIVE_START,
   LIVE_SUBSCRIBE,
   LIVE_LATEST_MANY,
+  LIVE_LATEST,
   LIVE_STOP,
   GET_FUTURE_EXPIRIES,
   GET_FUTURES,
@@ -124,6 +125,25 @@ export const subscribeLiveTokens = async (
   data: LiveSubscribeRequest
 ): Promise<any> => {
   const response = await axiosAuth.post<any>(LIVE_SUBSCRIBE, data);
+  return response.data;
+};
+
+export interface LiveLatestTickResponse {
+  brokerAccountId: string;
+  token: string;
+  tick: TickData | null;
+}
+
+export const getLiveLatestTick = async (
+  brokerAccountId: string,
+  token: string
+): Promise<LiveLatestTickResponse> => {
+  const response = await axiosAuth.get<LiveLatestTickResponse>(LIVE_LATEST, {
+    params: {
+      brokerAccountId,
+      token,
+    },
+  });
   return response.data;
 };
 

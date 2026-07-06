@@ -187,74 +187,6 @@ export class PaperTradingService {
     return this.exitPosition(userId, position.id, { price });
   }
 
-  private async buy(
-    userId: string,
-    input: CreatePaperOrderInput,
-    price: number,
-  ) {
-    return this.db.$transaction(async (tx) => {
-      const order = await tx.paperOrder.create({
-        data: {
-          userId,
-          brokerAccountId: input.brokerAccountId,
-          instrumentType: input.instrumentType,
-          token: input.token,
-          symbol: input.symbol,
-          exchangeType: input.exchangeType,
-          exchange: input.exchange,
-          side: "BUY",
-          quantity: input.quantity,
-          price,
-          status: "FILLED",
-        },
-      });
-
-      const existingPosition = await tx.paperPosition.findFirst({
-        where: {
-          userId,
-          token: input.token,
-          status: "OPEN",
-        },
-      });
-
-      if (!existingPosition) {
-        const position = await tx.paperPosition.create({
-          data: {
-            userId,
-            brokerAccountId: input.brokerAccountId,
-            instrumentType: input.instrumentType,
-            token: input.token,
-            symbol: input.symbol,
-            exchangeType: input.exchangeType,
-            exchange: input.exchange,
-            quantity: input.quantity,
-            avgPrice: price,
-            status: "OPEN",
-          },
-        });
-
-        return { order, position };
-      }
-
-      const newQuantity = existingPosition.quantity + input.quantity;
-
-      const newAvgPrice =
-        (existingPosition.avgPrice * existingPosition.quantity +
-          price * input.quantity) /
-        newQuantity;
-
-      const position = await tx.paperPosition.update({
-        where: { id: existingPosition.id },
-        data: {
-          quantity: newQuantity,
-          avgPrice: newAvgPrice,
-        },
-      });
-
-      return { order, position };
-    });
-  }
-
   private async openPosition(
     userId: string,
     input: CreatePaperOrderInput,
@@ -266,6 +198,7 @@ export class PaperTradingService {
       const order = await tx.paperOrder.create({
         data: {
           userId,
+          strategyId: input.strategyId,
           brokerAccountId: input.brokerAccountId,
           instrumentType: input.instrumentType,
           token: input.token,
@@ -282,6 +215,7 @@ export class PaperTradingService {
       const position = await tx.paperPosition.create({
         data: {
           userId,
+          strategyId: input.strategyId,
           brokerAccountId: input.brokerAccountId,
           instrumentType: input.instrumentType,
           token: input.token,
@@ -322,6 +256,7 @@ export class PaperTradingService {
       const order = await tx.paperOrder.create({
         data: {
           userId,
+          strategyId: input.strategyId,
           brokerAccountId: input.brokerAccountId,
           instrumentType: input.instrumentType,
           token: input.token,
@@ -439,6 +374,7 @@ export class PaperTradingService {
       const order = await tx.paperOrder.create({
         data: {
           userId,
+          strategyId: input.strategyId,
           brokerAccountId: input.brokerAccountId,
           instrumentType: input.instrumentType,
           token: input.token,
@@ -446,73 +382,6 @@ export class PaperTradingService {
           exchangeType: input.exchangeType,
           exchange: input.exchange,
           side: input.side,
-          quantity: input.quantity,
-          price,
-          status: "FILLED",
-        },
-      });
-
-      const position = await tx.paperPosition.update({
-        where: { id: existingPosition.id },
-        data: {
-          quantity: remainingQuantity,
-          status: remainingQuantity === 0 ? "CLOSED" : "OPEN",
-          realizedPnl: existingPosition.realizedPnl + realizedPnl,
-          closedAt: remainingQuantity === 0 ? new Date() : null,
-        },
-      });
-
-      return {
-        order,
-        position,
-        realizedPnl,
-      };
-    });
-  }
-
-  private async sell(
-    userId: string,
-    input: CreatePaperOrderInput,
-    price: number,
-  ) {
-    const existingPosition = await this.db.paperPosition.findFirst({
-      where: {
-        userId,
-        token: input.token,
-        status: "OPEN",
-      },
-    });
-
-    if (!existingPosition) {
-      throw new AppError(
-        "Open paper position not found",
-        404,
-        "PAPER_POSITION_NOT_FOUND",
-      );
-    }
-
-    if (input.quantity > existingPosition.quantity) {
-      throw new AppError(
-        "Sell quantity cannot be greater than open quantity",
-        400,
-        "PAPER_SELL_QUANTITY_TOO_HIGH",
-      );
-    }
-
-    const realizedPnl = (price - existingPosition.avgPrice) * input.quantity;
-    const remainingQuantity = existingPosition.quantity - input.quantity;
-
-    return this.db.$transaction(async (tx) => {
-      const order = await tx.paperOrder.create({
-        data: {
-          userId,
-          brokerAccountId: input.brokerAccountId,
-          instrumentType: input.instrumentType,
-          token: input.token,
-          symbol: input.symbol,
-          exchangeType: input.exchangeType,
-          exchange: input.exchange,
-          side: "SELL",
           quantity: input.quantity,
           price,
           status: "FILLED",

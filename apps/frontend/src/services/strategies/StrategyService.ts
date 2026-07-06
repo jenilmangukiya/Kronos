@@ -43,6 +43,7 @@ export interface Strategy {
   brokerAccountId?: string | null;
   name: string;
   symbol: string;
+  strategyType: string;
   instrumentType: StrategyInstrumentType;
   mode: StrategyMode;
   status: StrategyStatus;

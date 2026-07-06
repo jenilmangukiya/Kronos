@@ -25,6 +25,7 @@ export interface CreatePaperOrderRequest {
 export interface PaperOrder {
   id: string;
   userId: string;
+  strategyId?: string | null;
   brokerAccountId?: string | null;
   instrumentType: PaperInstrumentType;
   token: string;
@@ -41,6 +42,7 @@ export interface PaperOrder {
 export interface PaperPosition {
   id: string;
   userId: string;
+  strategyId?: string | null;
   brokerAccountId?: string | null;
   instrumentType: PaperInstrumentType;
   side: "LONG" | "SHORT";

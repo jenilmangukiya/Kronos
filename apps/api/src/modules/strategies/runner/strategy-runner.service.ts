@@ -99,6 +99,18 @@ export class StrategyRunnerService {
   }) {
     const tradeLimit = await this.canTakeEntryToday(strategy);
 
+    const alreadyOpenPosition = await this.app.db.paperPosition.findFirst({
+      where: {
+        userId: strategy.userId,
+        strategyId: strategy.id,
+        status: "OPEN",
+      },
+    });
+
+    if (alreadyOpenPosition) {
+      return;
+    }
+
     if (!tradeLimit.allowed) {
       const todayKey = this.getTodayKey(strategy.id);
 

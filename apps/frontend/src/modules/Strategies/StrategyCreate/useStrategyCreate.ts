@@ -24,6 +24,7 @@ export const useStrategyCreate = () => {
     maxTradesPerDay: 1,
     stopLossPercent: undefined,
     targetPercent: undefined,
+    reEntryMode: "NO_REENTRY",
   });
 
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -133,6 +134,7 @@ export const useStrategyCreate = () => {
         maxTradesPerDay: Number(form.maxTradesPerDay),
         stopLossPercent: form.stopLossPercent ? Number(form.stopLossPercent) : undefined,
         targetPercent: form.targetPercent ? Number(form.targetPercent) : undefined,
+        reEntryMode: form.reEntryMode,
       },
     };
 

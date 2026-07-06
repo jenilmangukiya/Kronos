@@ -35,6 +35,7 @@ export interface StrategyRisk {
   maxTradesPerDay?: number;
   stopLossPercent?: number;
   targetPercent?: number;
+  reEntryMode?: "NO_REENTRY" | "AFTER_EXIT" | "AFTER_NEW_SIGNAL";
 }
 
 export interface Strategy {

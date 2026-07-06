@@ -8,6 +8,8 @@ export type StrategyRuleType =
   | "UNDERLYING_CROSS_ABOVE"
   | "UNDERLYING_CROSS_BELOW";
 
+export type ReEntryMode = "NO_REENTRY" | "AFTER_EXIT" | "AFTER_NEW_SIGNAL";
+
 export interface StrategyRules {
   type: StrategyRuleType;
   underlyingToken: string;
@@ -29,6 +31,7 @@ export interface StrategyRisk {
   maxTradesPerDay?: number;
   stopLossPercent?: number;
   targetPercent?: number;
+  reEntryMode?: ReEntryMode;
 }
 
 export interface CreateStrategyInput {

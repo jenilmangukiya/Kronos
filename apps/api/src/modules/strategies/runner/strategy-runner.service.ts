@@ -11,6 +11,8 @@ export class StrategyRunnerService {
 
   private readonly dailyLimitLogged = new Map<string, string>();
 
+  private readonly executingStrategies = new Set<string>();
+
   constructor(private readonly app: FastifyInstance) {}
 
   start() {
@@ -97,99 +99,162 @@ export class StrategyRunnerService {
     trade: unknown;
     risk: unknown;
   }) {
-    const tradeLimit = await this.canTakeEntryToday(strategy);
-
-    const alreadyOpenPosition = await this.app.db.paperPosition.findFirst({
-      where: {
-        userId: strategy.userId,
-        strategyId: strategy.id,
-        status: "OPEN",
-      },
-    });
-
-    if (alreadyOpenPosition) {
+    if (this.executingStrategies.has(strategy.id)) {
       return;
     }
 
-    if (!tradeLimit.allowed) {
-      const todayKey = this.getTodayKey(strategy.id);
+    this.executingStrategies.add(strategy.id);
 
-      if (!this.dailyLimitLogged.has(todayKey)) {
-        await this.addLog(strategy.id, "Max trades reached for today", {
-          todayEntryCount: tradeLimit.todayEntryCount,
-          maxTradesPerDay: tradeLimit.maxTradesPerDay,
-        });
+    try {
+      const alreadyOpenPosition = await this.app.db.paperPosition.findFirst({
+        where: {
+          userId: strategy.userId,
+          strategyId: strategy.id,
+          status: "OPEN",
+        },
+      });
 
-        this.dailyLimitLogged.set(todayKey, "logged");
+      if (alreadyOpenPosition) {
+        return;
       }
 
-      return;
-    }
+      const trade = strategy.trade as {
+        instrumentType: "EQUITY" | "FUTURE" | "OPTION";
+        token: string;
+        symbol: string;
+        exchangeType: number;
+        exchange: string;
+        side: "BUY" | "SELL";
+        quantity: number;
+      };
 
-    const handler = strategyRegistry.get(strategy.strategyType);
+      const reEntryMode = this.getReEntryMode(strategy);
 
-    if (!handler) {
-      await this.addLog(strategy.id, "No handler found for strategy type", {
-        strategyType: strategy.strategyType,
+      if (reEntryMode === "AFTER_NEW_SIGNAL") {
+        const todayKey = `${strategy.id}:after-new-signal-not-implemented:${new Date()
+          .toISOString()
+          .slice(0, 10)}`;
+
+        if (!this.dailyLimitLogged.has(todayKey)) {
+          await this.addLog(
+            strategy.id,
+            "AFTER_NEW_SIGNAL mode is not implemented yet",
+            {
+              reEntryMode,
+            },
+          );
+
+          this.dailyLimitLogged.set(todayKey, "logged");
+        }
+
+        return;
+      }
+
+      if (reEntryMode === "NO_REENTRY") {
+        const previousEntryCount = await this.getTodayEntryCount(
+          strategy.id,
+          trade.side,
+        );
+
+        if (previousEntryCount > 0) {
+          const todayKey = `${strategy.id}:no-reentry:${new Date()
+            .toISOString()
+            .slice(0, 10)}`;
+
+          if (!this.dailyLimitLogged.has(todayKey)) {
+            await this.addLog(
+              strategy.id,
+              "Re-entry blocked by NO_REENTRY mode",
+              {
+                previousEntryCount,
+                reEntryMode,
+              },
+            );
+
+            this.dailyLimitLogged.set(todayKey, "logged");
+          }
+
+          return;
+        }
+      }
+
+      const tradeLimit = await this.canTakeEntryToday(strategy);
+
+      if (!tradeLimit.allowed) {
+        const todayKey = this.getTodayKey(strategy.id);
+
+        if (!this.dailyLimitLogged.has(todayKey)) {
+          await this.addLog(strategy.id, "Max trades reached for today", {
+            todayEntryCount: tradeLimit.todayEntryCount,
+            maxTradesPerDay: tradeLimit.maxTradesPerDay,
+          });
+
+          this.dailyLimitLogged.set(todayKey, "logged");
+        }
+
+        return;
+      }
+
+      const handler = strategyRegistry.get(strategy.strategyType);
+
+      if (!handler) {
+        await this.addLog(strategy.id, "No handler found for strategy type", {
+          strategyType: strategy.strategyType,
+        });
+        return;
+      }
+
+      const decision = await handler.evaluate({
+        app: this.app,
+        strategy,
       });
-      return;
-    }
 
-    const decision = await handler.evaluate({
-      app: this.app,
-      strategy,
-    });
+      if (!decision.shouldExecute) {
+        return;
+      }
 
-    if (!decision.shouldExecute) {
-      return;
-    }
+      await this.addLog(strategy.id, decision.reason, decision.meta);
 
-    await this.addLog(strategy.id, decision.reason, decision.meta);
+      if (!strategy.brokerAccountId) {
+        await this.addLog(
+          strategy.id,
+          "Skipped execution: broker account missing",
+        );
+        return;
+      }
 
-    if (!strategy.brokerAccountId) {
-      await this.addLog(
-        strategy.id,
-        "Skipped execution: broker account missing",
+      const paperTradingService = new PaperTradingService(this.app.db);
+
+      const orderResult = await paperTradingService.createOrder(
+        strategy.userId,
+        {
+          strategyId: strategy.id,
+          brokerAccountId: strategy.brokerAccountId,
+          instrumentType: trade.instrumentType,
+          token: trade.token,
+          symbol: trade.symbol,
+          exchangeType: trade.exchangeType,
+          exchange: trade.exchange,
+          side: trade.side,
+          quantity: trade.quantity,
+        },
       );
-      return;
+
+      await this.app.db.strategy.update({
+        where: {
+          id: strategy.id,
+        },
+        data: {
+          lastTriggeredAt: new Date(),
+        },
+      });
+
+      await this.addLog(strategy.id, "Entry paper order executed", {
+        orderResult,
+      });
+    } finally {
+      this.executingStrategies.delete(strategy.id);
     }
-
-    const trade = strategy.trade as {
-      instrumentType: "EQUITY" | "FUTURE" | "OPTION";
-      token: string;
-      symbol: string;
-      exchangeType: number;
-      exchange: string;
-      side: "BUY" | "SELL";
-      quantity: number;
-    };
-
-    const paperTradingService = new PaperTradingService(this.app.db);
-
-    const orderResult = await paperTradingService.createOrder(strategy.userId, {
-      strategyId: strategy.id,
-      brokerAccountId: strategy.brokerAccountId,
-      instrumentType: trade.instrumentType,
-      token: trade.token,
-      symbol: trade.symbol,
-      exchangeType: trade.exchangeType,
-      exchange: trade.exchange,
-      side: trade.side,
-      quantity: trade.quantity,
-    });
-
-    await this.app.db.strategy.update({
-      where: {
-        id: strategy.id,
-      },
-      data: {
-        lastTriggeredAt: new Date(),
-      },
-    });
-
-    await this.addLog(strategy.id, "Entry paper order executed", {
-      orderResult,
-    });
   }
 
   private async evaluateExit(
@@ -370,5 +435,13 @@ export class StrategyRunnerService {
   private getTodayKey(strategyId: string) {
     const today = new Date().toISOString().slice(0, 10);
     return `${strategyId}:${today}`;
+  }
+
+  private getReEntryMode(strategy: { risk: unknown }) {
+    const risk = strategy.risk as {
+      reEntryMode?: "NO_REENTRY" | "AFTER_EXIT" | "AFTER_NEW_SIGNAL";
+    };
+
+    return risk.reEntryMode ?? "NO_REENTRY";
   }
 }

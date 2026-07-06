@@ -55,3 +55,17 @@ export const formatInstrumentType = (instrumentType?: string): string => {
       return toTitleCase(instrumentType);
   }
 };
+
+export const formatReEntryMode = (value?: string): string => {
+  if (!value) return "No Re-entry";
+  switch (value) {
+    case "NO_REENTRY":
+      return "No Re-entry";
+    case "AFTER_EXIT":
+      return "After Exit";
+    case "AFTER_NEW_SIGNAL":
+      return "After New Signal";
+    default:
+      return toTitleCase(value);
+  }
+};

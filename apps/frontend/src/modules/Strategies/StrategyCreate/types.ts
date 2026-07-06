@@ -15,4 +15,5 @@ export interface StrategyFormValues {
   maxTradesPerDay: number;
   stopLossPercent?: number;
   targetPercent?: number;
+  reEntryMode: "NO_REENTRY" | "AFTER_EXIT" | "AFTER_NEW_SIGNAL";
 }

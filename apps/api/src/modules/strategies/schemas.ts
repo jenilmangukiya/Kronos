@@ -21,6 +21,10 @@ export const strategyRiskSchema = z.object({
   maxTradesPerDay: z.number().int().positive().optional(),
   stopLossPercent: z.number().positive().optional(),
   targetPercent: z.number().positive().optional(),
+  reEntryMode: z
+    .enum(["NO_REENTRY", "AFTER_EXIT", "AFTER_NEW_SIGNAL"])
+    .default("NO_REENTRY")
+    .optional(),
 });
 
 export const createStrategyBodySchema = z.object({

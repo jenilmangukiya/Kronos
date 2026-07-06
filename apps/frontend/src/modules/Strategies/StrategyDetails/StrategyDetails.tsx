@@ -24,6 +24,7 @@ import {
   formatRuleType,
   formatTradeSide,
   formatInstrumentType,
+  formatReEntryMode,
 } from "./helpers";
 
 export const StrategyDetails: React.FC = () => {
@@ -314,7 +315,7 @@ export const StrategyDetails: React.FC = () => {
   }
 
   // Create collapsible summary description
-  const configSummaryText = `${formatStrategyType(strategy.strategyType)} • ${formatInstrumentType(strategy.instrumentType)} • Rule: Spot ${strategy.rules.type === "UNDERLYING_CROSS_ABOVE" ? "Crosses Above" : "Crosses Below"} ${formatCurrency(strategy.rules.triggerPrice)} (Token: ${strategy.rules.underlyingToken}) • Trade: ${formatTradeSide(strategy.trade.side)} ${strategy.trade.quantity} qty of ${strategy.trade.symbol} • Risk: SL ${strategy.risk?.stopLossPercent ? `${strategy.risk.stopLossPercent}%` : "None"} / Target ${strategy.risk?.targetPercent ? `${strategy.risk.targetPercent}%` : "None"}`;
+  const configSummaryText = `${formatStrategyType(strategy.strategyType)} • ${formatInstrumentType(strategy.instrumentType)} • Rule: Spot ${strategy.rules.type === "UNDERLYING_CROSS_ABOVE" ? "Crosses Above" : "Crosses Below"} ${formatCurrency(strategy.rules.triggerPrice)} (Token: ${strategy.rules.underlyingToken}) • Trade: ${formatTradeSide(strategy.trade.side)} ${strategy.trade.quantity} qty of ${strategy.trade.symbol} • Risk: SL ${strategy.risk?.stopLossPercent ? `${strategy.risk.stopLossPercent}%` : "None"} / Target ${strategy.risk?.targetPercent ? `${strategy.risk.targetPercent}%` : "None"} / Re-entry: ${formatReEntryMode(strategy.risk?.reEntryMode)}`;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">

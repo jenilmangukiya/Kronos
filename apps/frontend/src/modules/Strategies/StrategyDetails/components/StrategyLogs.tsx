@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { StrategyLog } from "../../../../services/strategies/StrategyService";
 import { Card } from "../../../../components/ui/Card";
 import { Terminal, ChevronDown, ChevronRight, Activity } from "lucide-react";
+import { Badge } from "../../../../components/ui/Badge";
 
 interface StrategyLogsProps {
   logs: StrategyLog[];
@@ -21,6 +22,12 @@ const getLogMessageColor = (message: string): string => {
   }
   if (msg.includes("stop loss hit")) return "text-rose-400 font-semibold";
   if (msg.includes("max trades reached")) return "text-amber-400 font-semibold";
+  if (
+    msg.includes("re-entry blocked by no_reentry mode") ||
+    msg.includes("after_new_signal mode is not implemented yet")
+  ) {
+    return "text-amber-400 font-semibold";
+  }
   if (msg.includes("strategy stopped")) return "text-slate-400";
   if (
     msg.includes("error") ||
@@ -75,6 +82,10 @@ export const StrategyLogs: React.FC<StrategyLogsProps> = ({ logs, isPolling }) =
                 hour12: false,
               });
 
+              const isReEntryBlocked = log.message.includes("Re-entry blocked by NO_REENTRY mode");
+              const isNotImplemented = log.message.includes("AFTER_NEW_SIGNAL mode is not implemented yet");
+              const isWarningLog = isReEntryBlocked || isNotImplemented;
+
               return (
                 <div
                   key={log.id}
@@ -87,8 +98,13 @@ export const StrategyLogs: React.FC<StrategyLogsProps> = ({ logs, isPolling }) =
                     }`}
                   >
                     <span className="text-indigo-400/90 font-semibold select-none">[{timestamp}]</span>
-                    <span className={`flex-1 break-all ${getLogMessageColor(log.message)}`}>
-                      {log.message}
+                    <span className={`flex-1 break-all flex items-start gap-1.5 ${getLogMessageColor(log.message)}`}>
+                      {isWarningLog && (
+                        <Badge variant="warning" className="mt-0.5 py-0 px-1 text-[9px] font-extrabold uppercase shrink-0">
+                          Warning
+                        </Badge>
+                      )}
+                      <span>{log.message}</span>
                     </span>
                     {hasMeta && (
                       <span className="text-slate-500 hover:text-slate-300">

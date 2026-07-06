@@ -3,6 +3,7 @@ import { Strategy } from "../../../../services/strategies/StrategyService";
 import { Card } from "../../../../components/ui/Card";
 import { Badge } from "../../../../components/ui/Badge";
 import { Calendar, Cpu, TrendingUp, ShieldAlert, Award, Sliders, Shield } from "lucide-react";
+import { formatReEntryMode } from "../helpers";
 
 interface StrategyInfoCardProps {
   strategy: Strategy;
@@ -157,7 +158,7 @@ export const StrategyInfoCard: React.FC<StrategyInfoCardProps> = ({ strategy }) 
             <Shield className="h-4.5 w-4.5 text-emerald-400" />
             Risk Profile
           </h4>
-          <div className="grid grid-cols-3 gap-2 text-xs border-t border-slate-800/60 pt-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs border-t border-slate-800/60 pt-3">
             <div>
               <span className="text-slate-400 block font-medium">Max Trades/Day</span>
               <span className="text-slate-200 font-semibold mt-0.5 block">
@@ -174,6 +175,12 @@ export const StrategyInfoCard: React.FC<StrategyInfoCardProps> = ({ strategy }) 
               <span className="text-slate-400 block font-medium">Target %</span>
               <span className="text-emerald-400 font-semibold mt-0.5 block">
                 {strategy.risk?.targetPercent ? `${strategy.risk.targetPercent}%` : "None"}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-400 block font-medium">Re-entry Mode</span>
+              <span className="text-blue-400 font-semibold mt-0.5 block">
+                {formatReEntryMode(strategy.risk?.reEntryMode)}
               </span>
             </div>
           </div>

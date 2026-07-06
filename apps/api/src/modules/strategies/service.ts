@@ -135,10 +135,19 @@ export class StrategyService {
       },
     ]);
 
+    const openPosition = await this.db.paperPosition.findFirst({
+      where: {
+        userId,
+        strategyId: strategy.id,
+        status: "OPEN",
+      },
+    });
+
     const updated = await this.db.strategy.update({
       where: { id: strategy.id },
       data: {
         status: "RUNNING",
+        lastTriggeredAt: openPosition ? strategy.lastTriggeredAt : null,
       },
     });
 

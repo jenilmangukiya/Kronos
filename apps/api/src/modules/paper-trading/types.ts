@@ -4,6 +4,7 @@ export type PaperOrderSide = "BUY" | "SELL";
 
 export interface CreatePaperOrderInput {
   brokerAccountId?: string;
+  strategyId?: string;
   instrumentType: PaperInstrumentType;
   token: string;
   symbol: string;

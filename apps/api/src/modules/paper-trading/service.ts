@@ -23,6 +23,7 @@ export class PaperTradingService {
         userId,
         token: input.token,
         status: "OPEN",
+        strategyId: input.strategyId ?? null,
       },
     });
 
@@ -164,6 +165,26 @@ export class PaperTradingService {
         realizedPnl: pnl,
       };
     });
+  }
+
+  async exitPositionByStrategy(
+    userId: string,
+    strategyId: string,
+    price?: number,
+  ) {
+    const position = await this.db.paperPosition.findFirst({
+      where: {
+        userId,
+        strategyId,
+        status: "OPEN",
+      },
+    });
+
+    if (!position) {
+      return null;
+    }
+
+    return this.exitPosition(userId, position.id, { price });
   }
 
   private async buy(

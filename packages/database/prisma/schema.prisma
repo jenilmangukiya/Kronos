@@ -99,6 +99,8 @@ model PaperOrder {
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  strategyId String? @map("strategy_id")
+
   brokerAccountId String? @map("broker_account_id")
 
   instrumentType PaperInstrumentType @map("instrument_type")
@@ -128,6 +130,8 @@ model PaperPosition {
 
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  strategyId String? @map("strategy_id")
 
   brokerAccountId String? @map("broker_account_id")
 

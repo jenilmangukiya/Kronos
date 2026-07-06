@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const createPaperOrderBodySchema = z.object({
   brokerAccountId: z.string().optional(),
+  strategyId: z.string().optional(),
   instrumentType: z.enum(["EQUITY", "FUTURE", "OPTION"]),
   token: z.string().min(1),
   symbol: z.string().min(1),

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { createChart, ColorType, CandlestickSeries, IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
+import { createChart, ColorType, CandlestickSeries, IChartApi, ISeriesApi, UTCTimestamp, LineStyle, IPriceLine, createSeriesMarkers } from "lightweight-charts";
 import { Spinner } from "../ui/Spinner";
 import { formatISTTime, formatISTDateTime } from "../../utils/date/marketTime";
 
@@ -11,11 +11,27 @@ export type Candle = {
   close: number;
 };
 
+export type ChartMarker = {
+  time: string | number;
+  position: "aboveBar" | "belowBar" | "inBar";
+  shape: "arrowUp" | "arrowDown" | "circle" | "square";
+  text: string;
+  color?: string;
+};
+
+export type PriceLine = {
+  price: number;
+  title: string;
+  color?: string;
+};
+
 interface CandleChartProps {
   candles: Candle[];
   height?: number;
   isLoading?: boolean;
   emptyMessage?: string;
+  markers?: ChartMarker[];
+  priceLines?: PriceLine[];
 }
 
 export const CandleChart: React.FC<CandleChartProps> = ({
@@ -23,17 +39,24 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   height = 300,
   isLoading = false,
   emptyMessage = "No candle data available yet",
+  markers = [],
+  priceLines = [],
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const priceLinesRef = useRef<IPriceLine[]>([]);
 
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    const container = chartContainerRef.current;
+    if (!container) return;
+
+    const initialWidth = container.clientWidth || 600;
+    console.log("[CandleChart] Initializing chart with container clientWidth:", container.clientWidth, "using width:", initialWidth);
 
     // Create chart instances
-    const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
+    const chart = createChart(container, {
+      width: initialWidth,
       height: height,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
@@ -54,7 +77,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         borderVisible: true,
         timeVisible: true,
         secondsVisible: false,
-        tickMarkFormatter: (time: any) => {
+        tickMarkFormatter: (time: unknown) => {
           if (typeof time === "number") {
             return formatISTTime(time);
           }
@@ -73,7 +96,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         },
       },
       localization: {
-        timeFormatter: (time: any) => {
+        timeFormatter: (time: unknown) => {
           if (typeof time === "number") {
             return formatISTDateTime(time);
           }
@@ -111,16 +134,21 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       if (!entries || entries.length === 0) return;
       const entry = entries[0];
       if (entry) {
-        const { width } = entry.contentRect;
-        chart.resize(width, height);
+        const { width: contentWidth } = entry.contentRect;
+        const actualWidth = container.clientWidth || contentWidth || 600;
+        console.log("[CandleChart ResizeObserver] Detected resize - clientWidth:", container.clientWidth, "contentRect.width:", contentWidth, "resized width:", actualWidth);
+        if (actualWidth > 0) {
+          chart.resize(actualWidth, height);
+        }
       }
     });
 
-    resizeObserver.observe(chartContainerRef.current);
+    resizeObserver.observe(container);
 
     // Cleanup
     return () => {
       resizeObserver.disconnect();
+      priceLinesRef.current = [];
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -144,32 +172,75 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     }
   }, [candles]);
 
-  if (isLoading) {
-    return (
-      <div
-        style={{ height }}
-        className="flex flex-col items-center justify-center border border-slate-800 rounded-xl bg-slate-950/20"
-      >
-        <Spinner size="md" />
-        <span className="mt-2 text-xs text-slate-400">Loading candles...</span>
-      </div>
-    );
-  }
+  // Update markers when markers prop changes
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    if (markers && markers.length > 0) {
+      const formattedMarkers = markers.map((m) => ({
+        time: (typeof m.time === "string" ? Math.floor(new Date(m.time).getTime() / 1000) : m.time) as UTCTimestamp,
+        position: m.position,
+        shape: m.shape,
+        text: m.text,
+        color: m.color || (m.shape === "arrowUp" ? "#10b981" : m.shape === "arrowDown" ? "#ef4444" : "#a855f7"),
+      }));
+      createSeriesMarkers(seriesRef.current, formattedMarkers);
+    } else {
+      createSeriesMarkers(seriesRef.current, []);
+    }
+  }, [markers, candles]);
 
-  if (candles.length === 0) {
-    return (
-      <div
-        style={{ height }}
-        className="flex items-center justify-center border border-slate-800 rounded-xl bg-slate-950/20 text-slate-500 text-xs"
-      >
-        {emptyMessage}
-      </div>
-    );
-  }
+  // Update price lines when priceLines prop changes
+  useEffect(() => {
+    if (!seriesRef.current) return;
+
+    // Clear old price lines
+    priceLinesRef.current.forEach((line) => {
+      seriesRef.current?.removePriceLine(line);
+    });
+    priceLinesRef.current = [];
+
+    // Create new price lines
+    if (priceLines && priceLines.length > 0) {
+      priceLines.forEach((pl) => {
+        const line = seriesRef.current?.createPriceLine({
+          price: pl.price,
+          color: pl.color || "rgba(148, 163, 184, 0.8)", // default slate-400 w/ opacity
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: pl.title,
+        });
+        if (line) {
+          priceLinesRef.current.push(line);
+        }
+      });
+    }
+  }, [priceLines, candles]);
 
   return (
     <div className="relative w-full border border-slate-800 rounded-xl bg-slate-950/20 p-2">
       <div ref={chartContainerRef} className="w-full" style={{ height }} />
+
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div
+          style={{ height }}
+          className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 rounded-xl z-10"
+        >
+          <Spinner size="md" />
+          <span className="mt-2 text-xs text-slate-400">Loading candles...</span>
+        </div>
+      )}
+
+      {/* Empty State Overlay */}
+      {!isLoading && candles.length === 0 && (
+        <div
+          style={{ height }}
+          className="absolute inset-0 flex items-center justify-center bg-slate-950/80 rounded-xl text-slate-500 text-xs z-10"
+        >
+          {emptyMessage}
+        </div>
+      )}
     </div>
   );
 };

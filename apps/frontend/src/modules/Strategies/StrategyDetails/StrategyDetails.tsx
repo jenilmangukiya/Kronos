@@ -18,7 +18,7 @@ import { Spinner } from "../../../components/ui/Spinner";
 import { Card } from "../../../components/ui/Card";
 import { Badge } from "../../../components/ui/Badge";
 import { formatCurrency, formatDate } from "../../../utils/format";
-import { CandleChart } from "../../../components/charts/CandleChart";
+import { CandleChart, PriceLine, ChartMarker, Candle } from "../../../components/charts/CandleChart";
 import {
   formatStrategyType,
   formatRuleType,
@@ -95,6 +95,156 @@ export const StrategyDetails: React.FC = () => {
   const strategyOrders = orders
     .filter((order) => order.strategyId === strategy.id)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // Find open position for the strategy
+  const openPosition = openPositions[0];
+
+  const priceLines: PriceLine[] = [];
+  if (openPosition) {
+    const avgPrice = openPosition.avgPrice;
+    const sideFormatted = formatTradeSide(openPosition.side);
+    const isLong = sideFormatted === "BUY";
+    const stopLossPercent = strategy.risk?.stopLossPercent;
+    const targetPercent = strategy.risk?.targetPercent;
+
+    // 1. Entry Price Line
+    priceLines.push({
+      price: avgPrice,
+      title: "Entry",
+      color: "#3b82f6", // blue-500
+    });
+
+    // 2. Target Price Line
+    if (targetPercent && targetPercent > 0) {
+      const targetPrice = isLong
+        ? avgPrice * (1 + targetPercent / 100)
+        : avgPrice * (1 - targetPercent / 100);
+      priceLines.push({
+        price: targetPrice,
+        title: "Target",
+        color: "#10b981", // emerald-500
+      });
+    }
+
+    // 3. Stop Loss Price Line
+    if (stopLossPercent && stopLossPercent > 0) {
+      const stopLossPrice = isLong
+        ? avgPrice * (1 - stopLossPercent / 100)
+        : avgPrice * (1 + stopLossPercent / 100);
+      priceLines.push({
+        price: stopLossPrice,
+        title: "SL",
+        color: "#ef4444", // red-500
+      });
+    }
+  }
+
+  // Calculate entry/exit markers from filled strategy orders
+  const findNearestCandleTime = (orderTimeSec: number, candlesList: Candle[]): number | null => {
+    if (candlesList.length === 0) return null;
+    let nearestCandle = candlesList[0];
+    if (!nearestCandle) return null;
+    let minDiff = Math.abs(Number(nearestCandle.time) - orderTimeSec);
+
+    for (let i = 1; i < candlesList.length; i++) {
+      const candle = candlesList[i];
+      if (!candle) continue;
+      const diff = Math.abs(Number(candle.time) - orderTimeSec);
+      if (diff < minDiff) {
+        minDiff = diff;
+        nearestCandle = candle;
+      }
+    }
+    return Number(nearestCandle.time);
+  };
+
+  interface StrategyOrderSubset {
+    createdAt: string;
+    status: string;
+    side: string;
+    price: number;
+    symbol: string;
+    quantity: number;
+  }
+
+  const getMarkersFromOrders = (candlesList: Candle[], strategyOrdersList: StrategyOrderSubset[]): ChartMarker[] => {
+    const chronological = [...strategyOrdersList]
+      .filter((order) => order.status === "FILLED")
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    if (chronological.length === 0 || candlesList.length === 0) return [];
+
+    const markersList: ChartMarker[] = [];
+    const firstOrder = chronological[0];
+    if (!firstOrder) return [];
+
+    const entrySide = formatTradeSide(firstOrder.side);
+
+    chronological.forEach((order, index) => {
+      const orderTimeSec = Math.floor(new Date(order.createdAt).getTime() / 1000);
+      const nearestTime = findNearestCandleTime(orderTimeSec, candlesList);
+      if (nearestTime === null) return;
+
+      const orderSide = formatTradeSide(order.side);
+      const isEntry = index === 0;
+      const isExit = orderSide !== entrySide;
+
+      let text = "";
+      let position: "aboveBar" | "belowBar" = "belowBar";
+      let shape: "arrowUp" | "arrowDown" | "circle" = "circle";
+      let color = "";
+
+      if (isEntry) {
+        if (orderSide === "BUY") {
+          text = `ENTRY BUY @ ${formatCurrency(order.price)}`;
+          position = "belowBar";
+          shape = "arrowUp";
+          color = "#10b981"; // green
+        } else {
+          text = `ENTRY SELL @ ${formatCurrency(order.price)}`;
+          position = "aboveBar";
+          shape = "arrowDown";
+          color = "#ef4444"; // red
+        }
+      } else if (isExit) {
+        if (orderSide === "BUY") {
+          text = `EXIT BUY @ ${formatCurrency(order.price)}`;
+          position = "belowBar";
+          shape = "circle";
+          color = "#a855f7"; // purple
+        } else {
+          text = `EXIT SELL @ ${formatCurrency(order.price)}`;
+          position = "aboveBar";
+          shape = "circle";
+          color = "#a855f7"; // purple
+        }
+      } else {
+        if (orderSide === "BUY") {
+          text = `BUY @ ${formatCurrency(order.price)}`;
+          position = "belowBar";
+          shape = "arrowUp";
+          color = "#10b981";
+        } else {
+          text = `SELL @ ${formatCurrency(order.price)}`;
+          position = "aboveBar";
+          shape = "arrowDown";
+          color = "#ef4444";
+        }
+      }
+
+      markersList.push({
+        time: nearestTime,
+        position,
+        shape,
+        text,
+        color,
+      });
+    });
+
+    return markersList;
+  };
+
+  const markers = getMarkersFromOrders(candles, strategyOrders);
 
   // Live Price Calculation & Proximity Warning
   const ltp = livePriceData?.tick?.ltp ?? null;
@@ -354,6 +504,8 @@ export const StrategyDetails: React.FC = () => {
               isLoading={isCandlesLoading || (isCandlesFetching && candles.length === 0)}
               height={300}
               emptyMessage="No candle data available yet"
+              markers={markers}
+              priceLines={priceLines}
             />
           )}
         </Card>

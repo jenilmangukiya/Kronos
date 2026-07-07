@@ -4,6 +4,7 @@ import { AppError } from "../../errors/app-error.js";
 import type { CreateStrategyInput, UpdateStrategyInput } from "./types.js";
 import { liveMarketDataService } from "../market-data/live/live-market-data.service.js";
 import { PaperTradingService } from "../paper-trading/service.js";
+import { liveTickStore } from "../market-data/live/live-tick.store.js";
 
 export class StrategyService {
   constructor(
@@ -331,5 +332,142 @@ export class StrategyService {
         meta: meta ?? {},
       },
     });
+  }
+
+  private getTodayRange() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+
+    return { start, end };
+  }
+
+  private async getTodayEntryCount(strategyId: string, entrySide: "BUY" | "SELL") {
+    const { start, end } = this.getTodayRange();
+
+    return this.db.paperOrder.count({
+      where: {
+        strategyId,
+        side: entrySide,
+        createdAt: {
+          gte: start,
+          lte: end,
+        },
+      },
+    });
+  }
+
+  private getReEntryMode(strategy: any): string {
+    const risk = (strategy.risk || {}) as any;
+    return risk.reEntryMode || "NO_REENTRY";
+  }
+
+  private getConditionPreview(strategy: any, tick: any) {
+    if (strategy.strategyType !== "PRICE_BREAKOUT") {
+      return null;
+    }
+    const rules = (strategy.rules || {}) as any;
+    const triggerPrice = rules.triggerPrice;
+    const type = rules.type;
+
+    if (!tick) {
+      return {
+        type,
+        triggerPrice,
+        matched: false,
+      };
+    }
+
+    let matched = false;
+    if (type === "UNDERLYING_CROSS_ABOVE") {
+      matched = tick.ltp >= triggerPrice;
+    } else if (type === "UNDERLYING_CROSS_BELOW") {
+      matched = tick.ltp <= triggerPrice;
+    }
+
+    return {
+      type,
+      triggerPrice,
+      matched,
+    };
+  }
+
+  async getRuntimeStatus(userId: string, strategyId: string) {
+    const strategy = await this.getById(userId, strategyId);
+
+    const openPosition = await this.db.paperPosition.findFirst({
+      where: {
+        userId,
+        strategyId: strategy.id,
+        status: "OPEN",
+      },
+    });
+    const hasOpenPosition = !!openPosition;
+
+    const trade = (strategy.trade || {}) as any;
+    const entrySide = trade.side || "BUY";
+    const tradesToday = await this.getTodayEntryCount(strategy.id, entrySide);
+
+    const risk = (strategy.risk || {}) as any;
+    const maxTradesPerDay = risk.maxTradesPerDay ?? 1;
+    const reEntryMode = this.getReEntryMode(strategy);
+
+    const rules = (strategy.rules || {}) as any;
+    const underlyingToken = rules.underlyingToken;
+    const brokerAccountId = strategy.brokerAccountId;
+
+    const tick = (brokerAccountId && underlyingToken)
+      ? liveTickStore.getTick(brokerAccountId, underlyingToken)
+      : null;
+
+    const condition = this.getConditionPreview(strategy, tick);
+
+    let canEnter = false;
+    let reason = "";
+
+    if (strategy.status !== "RUNNING") {
+      canEnter = false;
+      reason = "Strategy is stopped";
+    } else if (hasOpenPosition) {
+      canEnter = false;
+      reason = "Open position exists, monitoring exit";
+    } else if (!tick) {
+      canEnter = false;
+      reason = "Waiting for live tick";
+    } else if (reEntryMode === "NO_REENTRY" && tradesToday > 0) {
+      canEnter = false;
+      reason = "Re-entry blocked by NO_REENTRY mode";
+    } else if (tradesToday >= maxTradesPerDay) {
+      canEnter = false;
+      reason = "Max trades reached for today";
+    } else if (strategy.strategyType !== "PRICE_BREAKOUT") {
+      canEnter = false;
+      reason = "Unsupported runtime condition preview";
+    } else if (condition && condition.matched) {
+      canEnter = true;
+      reason = "Entry condition matched";
+    } else {
+      canEnter = false;
+      reason = "Waiting for entry condition";
+    }
+
+    return {
+      strategyId: strategy.id,
+      status: strategy.status,
+      mode: strategy.mode,
+      strategyType: strategy.strategyType,
+      brokerAccountId: strategy.brokerAccountId,
+      hasOpenPosition,
+      openPosition: openPosition || null,
+      tradesToday,
+      maxTradesPerDay,
+      reEntryMode,
+      canEnter,
+      reason,
+      liveTick: tick,
+      condition,
+    };
   }
 }

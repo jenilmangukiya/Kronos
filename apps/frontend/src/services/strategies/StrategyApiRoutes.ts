@@ -8,3 +8,5 @@ export const STOP_EXIT_STRATEGY = (id: string) => `/strategies/${id}/stop-exit`;
 export const RESET_STRATEGY = (id: string) => `/strategies/${id}/reset`;
 export const DUPLICATE_STRATEGY = (id: string) => `/strategies/${id}/duplicate`;
 export const GET_STRATEGY_LOGS = (id: string) => `/strategies/${id}/logs`;
+export const GET_STRATEGY_RUNTIME_STATUS = (id: string) => `/strategies/${id}/runtime-status`;
+

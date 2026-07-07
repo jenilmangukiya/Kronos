@@ -88,4 +88,12 @@ export class StrategyController {
 
     return this.strategyService.getLogs(userId, strategyId);
   }
+
+  async getRuntimeStatus(userId: string | undefined, strategyId: string) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    return this.strategyService.getRuntimeStatus(userId, strategyId);
+  }
 }

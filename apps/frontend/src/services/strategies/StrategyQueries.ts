@@ -11,9 +11,11 @@ import {
   resetStrategy,
   duplicateStrategy,
   getStrategyLogs,
+  getStrategyRuntimeStatus,
   Strategy,
   CreateStrategyRequest,
   StrategyLog,
+  StrategyRuntimeStatus,
 } from "./StrategyService";
 
 export const useGetStrategies = (
@@ -172,6 +174,17 @@ export const useGetStrategyLogs = (
   useQuery<StrategyLog[], AxiosError>({
     queryKey: ["strategies", id, "logs"],
     queryFn: () => getStrategyLogs(id),
+    enabled: Boolean(id) && (options?.enabled ?? true),
+    ...options,
+  });
+
+export const useStrategyRuntimeStatus = (
+  id: string,
+  options?: Partial<UseQueryOptions<StrategyRuntimeStatus, AxiosError>>
+) =>
+  useQuery<StrategyRuntimeStatus, AxiosError>({
+    queryKey: ["strategies", id, "runtime-status"],
+    queryFn: () => getStrategyRuntimeStatus(id),
     enabled: Boolean(id) && (options?.enabled ?? true),
     ...options,
   });

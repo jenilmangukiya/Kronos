@@ -9,6 +9,7 @@ import {
   useStopAndExitStrategy,
   useResetStrategy,
   useDuplicateStrategy,
+  useStrategyRuntimeStatus,
 } from "../../../services/strategies/StrategyQueries";
 import { useGetPaperPositions, useGetPaperOrders } from "../../../services/paper-trading/PaperTradingQueries";
 import { useLiveLatestTick } from "../../../services/market-data/MarketDataQueries";
@@ -31,6 +32,15 @@ export const useStrategyDetails = () => {
     error: logsError,
   } = useGetStrategyLogs(id, {
     refetchInterval: 2000,
+  });
+
+  // Poll runtime status every 1 second
+  const {
+    data: runtimeStatus,
+    isLoading: isRuntimeStatusLoading,
+    error: runtimeStatusError,
+  } = useStrategyRuntimeStatus(id, {
+    refetchInterval: 1000,
   });
 
   // Poll paper positions every 2 seconds
@@ -82,6 +92,7 @@ export const useStrategyDetails = () => {
     queryClient.invalidateQueries({ queryKey: ["strategies"] });
     queryClient.invalidateQueries({ queryKey: ["strategies", id] });
     queryClient.invalidateQueries({ queryKey: ["strategies", id, "logs"] });
+    queryClient.invalidateQueries({ queryKey: ["strategies", id, "runtime-status"] });
     queryClient.invalidateQueries({ queryKey: ["paper-trading", "positions"] });
     queryClient.invalidateQueries({ queryKey: ["paper-trading", "orders"] });
     if (brokerAccountId && underlyingToken) {
@@ -181,7 +192,9 @@ export const useStrategyDetails = () => {
     isLoading: isLoading || isPositionsLoading || isOrdersLoading,
     isLogsLoading,
     isLivePriceLoading,
-    error,
+    runtimeStatus,
+    isRuntimeStatusLoading,
+    error: error || (runtimeStatusError ? ((runtimeStatusError as any).response?.data?.message || (runtimeStatusError as any).message) : null),
     actionError,
     setActionError,
     handleStart,

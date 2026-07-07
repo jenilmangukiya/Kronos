@@ -8,6 +8,7 @@ import {
   Layers,
   Sliders,
   LineChart,
+  Cpu,
 } from "lucide-react";
 import { useStrategyDetails } from "./useStrategyDetails";
 import { StrategyInfoCard } from "./components/StrategyInfoCard";
@@ -26,6 +27,23 @@ import {
   formatInstrumentType,
   formatReEntryMode,
 } from "./helpers";
+
+const getStatusBadgeProps = (reason: string, canEnter: boolean) => {
+  if (canEnter) {
+    return { variant: "success" as const, text: "Can Enter" };
+  }
+  const r = reason.toLowerCase();
+  if (r.includes("stopped")) {
+    return { variant: "neutral" as const, text: "Stopped" };
+  }
+  if (r.includes("waiting") || r.includes("condition")) {
+    return { variant: "warning" as const, text: "Waiting" };
+  }
+  if (r.includes("blocked") || r.includes("max trades") || r.includes("exists") || r.includes("unsupported")) {
+    return { variant: "danger" as const, text: "Blocked" };
+  }
+  return { variant: "neutral" as const, text: "Blocked" };
+};
 
 export const StrategyDetails: React.FC = () => {
   const {
@@ -53,6 +71,7 @@ export const StrategyDetails: React.FC = () => {
     isCandlesLoading,
     isCandlesFetching,
     candlesError,
+    runtimeStatus,
   } = useStrategyDetails();
 
   const [isConfigExpanded, setIsConfigExpanded] = useState(false);
@@ -418,113 +437,205 @@ export const StrategyDetails: React.FC = () => {
         </Card>
       </div>
 
-      {/* Grid: Live Price Card & Candle Chart Placeholder */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 2. Live Price Card */}
-        <Card className="border-slate-800 bg-slate-900/40 p-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-            <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-              <Activity className="h-5 w-5 text-emerald-400" />
-              Live Price Card
-            </h3>
-            {isRunning && priceState.state === "Live" && (
-              <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-semibold uppercase tracking-wider">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-                Live
-              </span>
-            )}
-          </div>
+      {/* Grid: Live Price Card, Runtime Status Card & Candle Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1 flex flex-col gap-6">
+          {/* 2. Live Price Card */}
+          <Card className="border-slate-800 bg-slate-900/40 p-6 space-y-4 flex-1 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-emerald-400" />
+                  Live Price Card
+                </h3>
+                {isRunning && priceState.state === "Live" && (
+                  <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-semibold uppercase tracking-wider">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    Live
+                  </span>
+                )}
+              </div>
 
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">Underlying LTP</span>
-              <span className="text-3xl font-extrabold text-emerald-400 mt-2 block font-mono">
-                {ltp !== null ? formatCurrency(ltp) : "Fetching..."}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">Trigger Price</span>
-              <span className="text-3xl font-extrabold text-slate-200 mt-2 block font-mono">
-                {formatCurrency(triggerPrice)}
-              </span>
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-6 mt-4">
+                <div>
+                  <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">Underlying LTP</span>
+                  <span className="text-3xl font-extrabold text-emerald-400 mt-2 block font-mono">
+                    {ltp !== null ? formatCurrency(ltp) : "Fetching..."}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">Trigger Price</span>
+                  <span className="text-3xl font-extrabold text-slate-200 mt-2 block font-mono">
+                    {formatCurrency(triggerPrice)}
+                  </span>
+                </div>
+              </div>
 
-          {/* Trigger price warning callout */}
-          {showWarning && (
-            <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs p-3 rounded-lg flex items-start gap-2 shadow-lg shadow-amber-500/5">
-              <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
-              <span>
-                Trigger price is far from current underlying price. Please confirm this is intentional.
-              </span>
+              {/* Trigger price warning callout */}
+              {showWarning && (
+                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs p-3 rounded-lg flex items-start gap-2 shadow-lg shadow-amber-500/5 mt-3">
+                  <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
+                  <span>
+                    Trigger price is far from current underlying price. Please confirm this is intentional.
+                  </span>
+                </div>
+              )}
             </div>
-          )}
 
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-800/40 text-sm">
-            <div>
-              <span className="text-slate-400 block text-xs font-medium uppercase tracking-wider">Rule Type</span>
-              <span className="text-slate-200 font-semibold mt-0.5 block truncate" title={formatRuleType(ruleType)}>
-                {formatRuleType(ruleType)}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 block text-xs font-medium uppercase tracking-wider">Condition Status</span>
-              <div className="mt-1">
-                <Badge variant={conditionStatusVariant}>{conditionStatusText}</Badge>
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800/40 text-sm mt-4">
+              <div>
+                <span className="text-slate-400 block text-xs font-medium uppercase tracking-wider">Rule Type</span>
+                <span className="text-slate-200 font-semibold mt-0.5 block truncate" title={formatRuleType(ruleType)}>
+                  {formatRuleType(ruleType)}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-xs font-medium uppercase tracking-wider">Condition Status</span>
+                <div className="mt-1">
+                  <Badge variant={conditionStatusVariant}>{conditionStatusText}</Badge>
+                </div>
               </div>
             </div>
-          </div>
-        </Card>
+          </Card>
 
-        {/* 8. Candle Chart Card */}
-        <Card className="border-slate-800 bg-slate-900/40 p-6 flex flex-col space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+          {/* Runtime Status Card */}
+          <Card className="border-slate-800 bg-slate-900/40 p-6 space-y-4 flex-1 flex flex-col justify-between">
             <div>
-              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                <LineChart className="h-5 w-5 text-indigo-400" />
-                {strategy.trade?.symbol || "Strategy"} 5m Candles
-              </h3>
-              <p className="text-slate-500 text-xs mt-0.5">
-                Refreshing every 30 seconds
-              </p>
-            </div>
-            {isCandlesFetching && (
-              <span className="flex items-center gap-1.5 text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 font-semibold uppercase tracking-wider">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-ping" />
-                Updating
-              </span>
-            )}
-          </div>
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                  <Cpu className="h-5 w-5 text-indigo-400" />
+                  Runtime Status
+                </h3>
+                {runtimeStatus && (
+                  <Badge variant={getStatusBadgeProps(runtimeStatus.reason, runtimeStatus.canEnter).variant}>
+                    {getStatusBadgeProps(runtimeStatus.reason, runtimeStatus.canEnter).text}
+                  </Badge>
+                )}
+              </div>
 
-          {!strategy.trade?.token ? (
-            <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
-              <AlertCircle className="h-8 w-8 text-slate-500" />
-              <span>Select a trade instrument to view candles</span>
+              {!runtimeStatus ? (
+                <div className="text-slate-500 text-xs py-4 text-center">Loading runtime status...</div>
+              ) : (
+                <div className="space-y-3 mt-4">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400">Can Enter</span>
+                    <Badge variant={runtimeStatus.canEnter ? "success" : "neutral"}>
+                      {runtimeStatus.canEnter ? "Yes" : "No"}
+                    </Badge>
+                  </div>
+
+                  <div className="flex justify-between items-start text-sm">
+                    <span className="text-slate-400 shrink-0">Reason</span>
+                    <span className="text-slate-250 text-right font-medium max-w-[70%] leading-snug">
+                      {runtimeStatus.reason}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400">Trades Today</span>
+                    <span className="text-slate-250 font-semibold font-mono">
+                      {runtimeStatus.tradesToday} / {runtimeStatus.maxTradesPerDay}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400">Re-entry Mode</span>
+                    <span className="text-slate-250 font-semibold">
+                      {formatReEntryMode(runtimeStatus.reEntryMode)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400">Has Open Position</span>
+                    <Badge variant={runtimeStatus.hasOpenPosition ? "danger" : "success"}>
+                      {runtimeStatus.hasOpenPosition ? "Yes" : "No"}
+                    </Badge>
+                  </div>
+
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400">Live Tick LTP</span>
+                    <span className="text-slate-250 font-semibold font-mono">
+                      {runtimeStatus.liveTick?.ltp !== undefined && runtimeStatus.liveTick?.ltp !== null
+                        ? formatCurrency(runtimeStatus.liveTick.ltp)
+                        : "Waiting..."}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-400">Condition Matched</span>
+                    <Badge
+                      variant={
+                        runtimeStatus.condition?.matched
+                          ? "success"
+                          : runtimeStatus.condition === null
+                          ? "neutral"
+                          : "warning"
+                      }
+                    >
+                      {runtimeStatus.condition?.matched
+                        ? "Matched"
+                        : runtimeStatus.condition === null
+                        ? "N/A"
+                        : "Waiting"}
+                    </Badge>
+                  </div>
+                </div>
+              )}
             </div>
-          ) : !strategy.brokerAccountId ? (
-            <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
-              <AlertCircle className="h-8 w-8 text-slate-500" />
-              <span>Connect broker account to view candles</span>
+          </Card>
+        </div>
+
+        <div className="lg:col-span-2">
+          {/* 8. Candle Chart Card */}
+          <Card className="border-slate-800 bg-slate-900/40 p-6 flex flex-col space-y-4 h-full">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                  <LineChart className="h-5 w-5 text-indigo-400" />
+                  {strategy.trade?.symbol || "Strategy"} 5m Candles
+                </h3>
+                <p className="text-slate-500 text-xs mt-0.5">
+                  Refreshing every 30 seconds
+                </p>
+              </div>
+              {isCandlesFetching && (
+                <span className="flex items-center gap-1.5 text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 font-semibold uppercase tracking-wider">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-ping" />
+                  Updating
+                </span>
+              )}
             </div>
-          ) : candlesError && !(isCandlesLoading || (isCandlesFetching && candles.length === 0)) ? (
-            <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-rose-400 text-xs space-y-2">
-              <AlertCircle className="h-8 w-8 text-rose-500/80" />
-              <span>Unable to load candle data</span>
-              <span className="text-[10px] text-slate-500 mt-1 max-w-xs text-center truncate px-4">
-                {candlesError?.message || String(candlesError)}
-              </span>
-            </div>
-          ) : (
-            <CandleChart
-              candles={candles}
-              isLoading={isCandlesLoading || (isCandlesFetching && candles.length === 0)}
-              height={300}
-              emptyMessage="No candle data available yet"
-              markers={markers}
-              priceLines={priceLines}
-            />
-          )}
-        </Card>
+
+            {!strategy.trade?.token ? (
+              <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
+                <AlertCircle className="h-8 w-8 text-slate-500" />
+                <span>Select a trade instrument to view candles</span>
+              </div>
+            ) : !strategy.brokerAccountId ? (
+              <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
+                <AlertCircle className="h-8 w-8 text-slate-500" />
+                <span>Connect broker account to view candles</span>
+              </div>
+            ) : candlesError && !(isCandlesLoading || (isCandlesFetching && candles.length === 0)) ? (
+              <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-rose-400 text-xs space-y-2">
+                <AlertCircle className="h-8 w-8 text-rose-500/80" />
+                <span>Unable to load candle data</span>
+                <span className="text-[10px] text-slate-500 mt-1 max-w-xs text-center truncate px-4">
+                  {candlesError?.message || String(candlesError)}
+                </span>
+              </div>
+            ) : (
+              <CandleChart
+                candles={candles}
+                isLoading={isCandlesLoading || (isCandlesFetching && candles.length === 0)}
+                height={300}
+                emptyMessage="No candle data available yet"
+                markers={markers}
+                priceLines={priceLines}
+              />
+            )}
+          </Card>
+        </div>
       </div>
 
       {/* 3. Open Position section */}

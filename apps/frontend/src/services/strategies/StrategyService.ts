@@ -10,6 +10,7 @@ import {
   RESET_STRATEGY,
   DUPLICATE_STRATEGY,
   GET_STRATEGY_LOGS,
+  GET_STRATEGY_RUNTIME_STATUS,
 } from "./StrategyApiRoutes";
 
 export type StrategyStatus = "STOPPED" | "RUNNING";
@@ -131,5 +132,36 @@ export const duplicateStrategy = async (id: string): Promise<Strategy> => {
 
 export const getStrategyLogs = async (id: string): Promise<StrategyLog[]> => {
   const response = await axiosAuth.get<StrategyLog[]>(GET_STRATEGY_LOGS(id));
+  return response.data;
+};
+
+export interface StrategyRuntimeStatus {
+  strategyId: string;
+  status: StrategyStatus;
+  mode: StrategyMode;
+  strategyType: string;
+  brokerAccountId: string | null;
+  hasOpenPosition: boolean;
+  openPosition?: any | null;
+  tradesToday: number;
+  maxTradesPerDay: number;
+  reEntryMode: string;
+  canEnter: boolean;
+  reason: string;
+  liveTick?: {
+    token: string;
+    sequenceNumber: string;
+    exchangeTimestamp: number;
+    ltp: number;
+  } | null;
+  condition?: {
+    type: string;
+    triggerPrice: number;
+    matched: boolean;
+  } | null;
+}
+
+export const getStrategyRuntimeStatus = async (id: string): Promise<StrategyRuntimeStatus> => {
+  const response = await axiosAuth.get<StrategyRuntimeStatus>(GET_STRATEGY_RUNTIME_STATUS(id));
   return response.data;
 };

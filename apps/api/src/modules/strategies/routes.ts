@@ -209,4 +209,23 @@ export async function strategyRoutes(app: FastifyInstance) {
       return strategyController.getLogs(request.user?.id, request.params.id);
     },
   );
+
+  typedApp.get(
+    "/strategies/:id/runtime-status",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Strategies"],
+        summary: "Get strategy runtime status",
+        security: [{ bearerAuth: [] }],
+        params: strategyParamsSchema,
+        response: {
+          200: anyResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return strategyController.getRuntimeStatus(request.user?.id, request.params.id);
+    },
+  );
 }

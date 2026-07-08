@@ -47,7 +47,6 @@ class RealtimeClient {
 
       ws.onmessage = (event) => {
         if (this.socket !== ws) return;
-        console.log("[RealtimeClient] Received raw message:", event.data);
         try {
           const message: ServerRealtimeMessage = JSON.parse(event.data);
           this.handlers.forEach((handler) => handler(message));
@@ -85,7 +84,6 @@ class RealtimeClient {
 
   send(message: ClientRealtimeMessage) {
     if (this.socket) {
-      console.log("[RealtimeClient] Sending message. ReadyState:", this.socket.readyState, "Message:", message);
       if (this.socket.readyState === WebSocket.OPEN) {
         this.socket.send(JSON.stringify(message));
       } else {

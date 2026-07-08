@@ -35,18 +35,20 @@ export const useStrategyDetails = () => {
     refetchInterval: 2000,
   });
 
-  // Poll runtime status every 1 second (REST fallback)
+  const realtime = useStrategyRealtime(id);
+  const realtimeConnected = realtime.isConnected;
+
+  // Poll runtime status every 1 second (REST fallback - only active when WS is disconnected)
   const {
     data: restRuntimeStatus,
     isLoading: isRuntimeStatusLoading,
     error: runtimeStatusError,
   } = useStrategyRuntimeStatus(id, {
-    refetchInterval: 1000,
+    refetchInterval: realtimeConnected ? false : 1000,
+    enabled: !realtimeConnected,
   });
 
-  const realtime = useStrategyRealtime(id);
   const runtimeStatus = realtime.runtimeStatus ?? restRuntimeStatus;
-  const realtimeConnected = realtime.isConnected;
 
   // Poll paper positions every 2 seconds
   const {

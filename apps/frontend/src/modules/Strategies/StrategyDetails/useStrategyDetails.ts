@@ -12,6 +12,7 @@ import {
   useStrategyRuntimeStatus,
 } from "../../../services/strategies/StrategyQueries";
 import { useGetPaperPositions, useGetPaperOrders } from "../../../services/paper-trading/PaperTradingQueries";
+import { useStrategyRealtime } from "../../../services/realtime/useStrategyRealtime";
 import { useLiveLatestTick } from "../../../services/market-data/MarketDataQueries";
 import { useStrategyCandles } from "../../../services/market-data/useCandles";
 
@@ -34,14 +35,18 @@ export const useStrategyDetails = () => {
     refetchInterval: 2000,
   });
 
-  // Poll runtime status every 1 second
+  // Poll runtime status every 1 second (REST fallback)
   const {
-    data: runtimeStatus,
+    data: restRuntimeStatus,
     isLoading: isRuntimeStatusLoading,
     error: runtimeStatusError,
   } = useStrategyRuntimeStatus(id, {
     refetchInterval: 1000,
   });
+
+  const realtime = useStrategyRealtime(id);
+  const runtimeStatus = realtime.runtimeStatus ?? restRuntimeStatus;
+  const realtimeConnected = realtime.isConnected;
 
   // Poll paper positions every 2 seconds
   const {
@@ -217,5 +222,6 @@ export const useStrategyDetails = () => {
     isCandlesLoading,
     isCandlesFetching,
     candlesError,
+    realtimeConnected,
   };
 };

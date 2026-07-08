@@ -1,0 +1,130 @@
+import { getAccessToken } from "../../utils/storage";
+import { ClientRealtimeMessage, ServerRealtimeMessage } from "./realtime.types";
+
+const getWsUrl = () => {
+  const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+  return `${apiBase.replace(/^http/, "ws")}/realtime/ws`;
+};
+
+type MessageHandler = (message: ServerRealtimeMessage) => void;
+
+class RealtimeClient {
+  private socket: WebSocket | null = null;
+  private handlers = new Set<MessageHandler>();
+  private activeStrategySubscriptions = new Set<string>();
+  private isConnecting = false;
+
+  connect() {
+    if (this.socket || this.isConnecting) {
+      console.log("[RealtimeClient] connect ignored: socket exists or is connecting");
+      return;
+    }
+
+    const token = getAccessToken();
+    if (!token) {
+      console.warn("[RealtimeClient] No access token found for realtime WebSocket connection");
+      return;
+    }
+
+    this.isConnecting = true;
+    const wsUrl = `${getWsUrl()}?token=${encodeURIComponent(token)}`;
+    console.log("[RealtimeClient] Connecting to:", wsUrl);
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      this.socket = ws;
+
+      ws.onopen = () => {
+        if (this.socket !== ws) return;
+        this.isConnecting = false;
+        console.log("[RealtimeClient] Realtime WebSocket connection established");
+        console.log("[RealtimeClient] Active subscriptions to re-send:", Array.from(this.activeStrategySubscriptions));
+        // Re-subscribe all active strategies
+        this.activeStrategySubscriptions.forEach((strategyId) => {
+          this.send({ type: "subscribe_strategy", strategyId });
+        });
+      };
+
+      ws.onmessage = (event) => {
+        if (this.socket !== ws) return;
+        console.log("[RealtimeClient] Received raw message:", event.data);
+        try {
+          const message: ServerRealtimeMessage = JSON.parse(event.data);
+          this.handlers.forEach((handler) => handler(message));
+        } catch (error) {
+          console.error("[RealtimeClient] Error parsing realtime WebSocket message:", error);
+        }
+      };
+
+      ws.onclose = (event) => {
+        if (this.socket !== ws) return;
+        this.isConnecting = false;
+        this.socket = null;
+        console.log("[RealtimeClient] Realtime WebSocket connection closed:", event.code, event.reason);
+      };
+
+      ws.onerror = (error) => {
+        if (this.socket !== ws) return;
+        this.isConnecting = false;
+        console.error("[RealtimeClient] Realtime WebSocket error:", error);
+      };
+    } catch (error) {
+      this.isConnecting = false;
+      console.error("[RealtimeClient] Failed to connect to realtime WebSocket:", error);
+    }
+  }
+
+  disconnect() {
+    console.log("[RealtimeClient] Disconnecting...");
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+    this.isConnecting = false;
+  }
+
+  send(message: ClientRealtimeMessage) {
+    if (this.socket) {
+      console.log("[RealtimeClient] Sending message. ReadyState:", this.socket.readyState, "Message:", message);
+      if (this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify(message));
+      } else {
+        console.warn("[RealtimeClient] Cannot send. Socket is not OPEN. ReadyState:", this.socket.readyState);
+      }
+    } else {
+      console.warn("[RealtimeClient] Cannot send. Socket is null.");
+    }
+  }
+
+  subscribe(handler: MessageHandler) {
+    this.handlers.add(handler);
+    this.connect();
+  }
+
+  unsubscribe(handler: MessageHandler) {
+    this.handlers.delete(handler);
+    if (this.handlers.size === 0) {
+      this.disconnect();
+    }
+  }
+
+  subscribeStrategy(strategyId: string) {
+    this.activeStrategySubscriptions.add(strategyId);
+    if (this.isConnected()) {
+      this.send({ type: "subscribe_strategy", strategyId });
+    }
+  }
+
+  unsubscribeStrategy(strategyId: string) {
+    this.activeStrategySubscriptions.delete(strategyId);
+    if (this.isConnected()) {
+      this.send({ type: "unsubscribe_strategy", strategyId });
+    }
+  }
+
+  isConnected(): boolean {
+    return this.socket !== null && this.socket.readyState === WebSocket.OPEN;
+  }
+}
+
+export const realtimeClient = new RealtimeClient();

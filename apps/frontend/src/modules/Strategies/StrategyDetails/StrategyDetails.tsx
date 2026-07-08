@@ -72,6 +72,7 @@ export const StrategyDetails: React.FC = () => {
     isCandlesFetching,
     candlesError,
     runtimeStatus,
+    realtimeConnected,
   } = useStrategyDetails();
 
   const [isConfigExpanded, setIsConfigExpanded] = useState(false);
@@ -503,10 +504,18 @@ export const StrategyDetails: React.FC = () => {
           <Card className="border-slate-800 bg-slate-900/40 p-6 space-y-4 flex-1 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                  <Cpu className="h-5 w-5 text-indigo-400" />
-                  Runtime Status
-                </h3>
+                <div className="flex flex-col gap-0.5">
+                  <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                    <Cpu className="h-5 w-5 text-indigo-400" />
+                    Runtime Status
+                  </h3>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    Realtime:{" "}
+                    <span className={realtimeConnected ? "text-emerald-400 font-semibold" : "text-amber-500 font-semibold"}>
+                      {realtimeConnected ? "Connected" : "Disconnected"}
+                    </span>
+                  </span>
+                </div>
                 {runtimeStatus && (
                   <Badge variant={getStatusBadgeProps(runtimeStatus.reason, runtimeStatus.canEnter).variant}>
                     {getStatusBadgeProps(runtimeStatus.reason, runtimeStatus.canEnter).text}

@@ -1,4 +1,5 @@
 import { FastifyInstance } from "fastify";
+import websocket from "@fastify/websocket";
 import prismaPlugin from "./prisma.js";
 import authPlugin from "./auth.js";
 import swaggerPlugin from "./swagger.js";
@@ -12,4 +13,6 @@ export async function registerPlugins(app: FastifyInstance) {
   await app.register(authPlugin);
 
   await app.register(swaggerPlugin);
+
+  await app.register(websocket);
 }

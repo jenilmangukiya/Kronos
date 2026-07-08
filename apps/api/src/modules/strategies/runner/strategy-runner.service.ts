@@ -72,6 +72,7 @@ export class StrategyRunnerService {
     rules: unknown;
     trade: unknown;
     risk: unknown;
+    state?: unknown;
   }) {
     const openPosition = await this.app.db.paperPosition.findFirst({
       where: {
@@ -98,6 +99,7 @@ export class StrategyRunnerService {
     rules: unknown;
     trade: unknown;
     risk: unknown;
+    state?: unknown;
   }) {
     if (this.executingStrategies.has(strategy.id)) {
       return;

@@ -56,6 +56,7 @@ export interface Strategy {
   trade: StrategyTrade;
   risk?: StrategyRisk;
   lastTriggeredAt?: string | null;
+  state?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -159,6 +160,7 @@ export interface StrategyRuntimeStatus {
     triggerPrice: number;
     matched: boolean;
   } | null;
+  state?: Record<string, unknown> | null;
 }
 
 export const getStrategyRuntimeStatus = async (id: string): Promise<StrategyRuntimeStatus> => {

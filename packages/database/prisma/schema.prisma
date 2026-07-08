@@ -191,6 +191,8 @@ model Strategy {
 
   symbol String
 
+  state Json?
+
   strategyType String @default("PRICE_BREAKOUT") @map("strategy_type")
 
   instrumentType StrategyInstrumentType @map("instrument_type")

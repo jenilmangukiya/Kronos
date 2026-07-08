@@ -75,6 +75,7 @@ export const StrategyDetails: React.FC = () => {
   } = useStrategyDetails();
 
   const [isConfigExpanded, setIsConfigExpanded] = useState(false);
+  const [isAdvancedExpanded, setIsAdvancedExpanded] = useState(false);
 
   if (isLoading) {
     return (
@@ -794,9 +795,50 @@ export const StrategyDetails: React.FC = () => {
         )}
 
         {isConfigExpanded && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4 pt-4 border-t border-slate-800/80 animate-fadeIn">
-            <StrategyInfoCard strategy={strategy} />
-            <StrategyJsonPreview strategy={strategy} />
+          <div className="space-y-6 mt-4 pt-4 border-t border-slate-800/80 animate-fadeIn">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <StrategyInfoCard strategy={strategy} />
+              <StrategyJsonPreview strategy={strategy} />
+            </div>
+
+            {/* Advanced / Debug Section */}
+            <div className="border-t border-slate-800/60 pt-4">
+              <div className="border border-slate-800 rounded-xl bg-slate-950/40 p-4">
+                <button
+                  type="button"
+                  onClick={() => setIsAdvancedExpanded(!isAdvancedExpanded)}
+                  className="flex items-center justify-between w-full text-slate-300 hover:text-white transition-colors duration-150 py-1"
+                >
+                  <span className="font-bold text-xs uppercase tracking-wider text-slate-400">Advanced / Debug</span>
+                  {isAdvancedExpanded ? (
+                    <ChevronUp className="h-4 w-4 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-slate-400" />
+                  )}
+                </button>
+
+                {isAdvancedExpanded && (
+                  <div className="mt-4 border-t border-slate-800/60 pt-4 space-y-4">
+                    <div>
+                      <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                        Runtime State
+                      </h4>
+                      {(() => {
+                        const state = runtimeStatus?.state ?? strategy.state;
+                        if (!state || Object.keys(state).length === 0) {
+                          return <p className="text-xs text-slate-500 italic">No runtime state yet.</p>;
+                        }
+                        return (
+                          <pre className="bg-slate-950 p-4 rounded-lg border border-slate-800 text-xs font-mono text-slate-300 overflow-x-auto max-h-[300px] whitespace-pre-wrap leading-relaxed">
+                            {JSON.stringify(state, null, 2)}
+                          </pre>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </Card>

@@ -34,6 +34,7 @@ export class StrategyService {
         rules: input.rules as any,
         trade: input.trade as any,
         risk: (input.risk ?? {}) as any,
+        state: {},
       },
     });
 
@@ -277,6 +278,7 @@ export class StrategyService {
       data: {
         status: "STOPPED",
         lastTriggeredAt: null,
+        state: {},
       },
     });
 
@@ -302,12 +304,42 @@ export class StrategyService {
         risk: strategy.risk ?? {},
         status: "STOPPED",
         lastTriggeredAt: null,
+        state: {},
       },
     });
 
     await this.addLog(duplicated.id, "Strategy duplicated");
 
     return duplicated;
+  }
+
+  async updateState(strategyId: string, state: Record<string, unknown>) {
+    return this.db.strategy.update({
+      where: { id: strategyId },
+      data: { state: state as any },
+    });
+  }
+
+  async mergeState(strategyId: string, partialState: Record<string, unknown>) {
+    const strategy = await this.db.strategy.findUnique({
+      where: { id: strategyId },
+      select: { state: true },
+    });
+
+    const currentState =
+      strategy?.state && typeof strategy.state === "object"
+        ? (strategy.state as Record<string, unknown>)
+        : {};
+
+    return this.db.strategy.update({
+      where: { id: strategyId },
+      data: {
+        state: {
+          ...currentState,
+          ...partialState,
+        } as any,
+      },
+    });
   }
 
   async getLogs(userId: string, strategyId: string) {
@@ -468,6 +500,7 @@ export class StrategyService {
       reason,
       liveTick: tick,
       condition,
+      state: strategy.state || {},
     };
   }
 }

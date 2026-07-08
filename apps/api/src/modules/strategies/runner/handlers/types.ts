@@ -27,6 +27,7 @@ export interface StrategyContext {
     strategyType: string;
     rules: unknown;
     trade: unknown;
+    state?: unknown;
   };
 }
 

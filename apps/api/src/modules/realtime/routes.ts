@@ -2,9 +2,19 @@ import { FastifyInstance } from "fastify";
 import type { RawData } from "ws";
 import { JwtService } from "../../services/jwt.service.js";
 import { ClientRealtimeMessage, ServerRealtimeMessage } from "./realtime.types.js";
+import { RealtimeService } from "./realtime.service.js";
 
 export async function realtimeRoutes(app: FastifyInstance) {
   const jwtService = new JwtService();
+  const realtimeService = new RealtimeService();
+
+  // Register broadcaster
+  realtimeService.startRuntimeStatusBroadcast(app);
+
+  // Stop broadcaster on app close
+  app.addHook("onClose", async () => {
+    realtimeService.stopRuntimeStatusBroadcast();
+  });
 
   app.get(
     "/realtime/ws",
@@ -39,11 +49,15 @@ export async function realtimeRoutes(app: FastifyInstance) {
         return;
       }
 
+      // When socket connects: add client to realtimeService, store clientId
+      const client = realtimeService.addClient(userId, socket);
+      const clientId = client.id;
+
       // On connection: log userId connected
-      app.log.info({ userId }, "realtime client connected");
+      app.log.info({ userId, clientId }, "realtime client connected");
 
       // Handle messages
-      socket.on("message", (rawMessage: RawData) => {
+      socket.on("message", async (rawMessage: RawData) => {
         let parsed: any;
         try {
           parsed = JSON.parse(rawMessage.toString());
@@ -67,6 +81,12 @@ export async function realtimeRoutes(app: FastifyInstance) {
           return;
         }
 
+        // On message: update client.lastSeenAt
+        const currentClient = realtimeService.getClient(clientId);
+        if (currentClient) {
+          currentClient.lastSeenAt = new Date();
+        }
+
         const message = parsed as ClientRealtimeMessage;
 
         if (message.type === "ping") {
@@ -74,6 +94,52 @@ export async function realtimeRoutes(app: FastifyInstance) {
             JSON.stringify({
               type: "pong",
               ts: Date.now(),
+            } satisfies ServerRealtimeMessage)
+          );
+        } else if (message.type === "subscribe_strategy") {
+          const { strategyId } = message;
+
+          // Verify strategy belongs to user before subscribing
+          const strategy = await app.db.strategy.findFirst({
+            where: {
+              id: strategyId,
+              userId,
+            },
+          });
+
+          if (!strategy) {
+            socket.send(
+              JSON.stringify({
+                type: "error",
+                message: "Strategy not found",
+              } satisfies ServerRealtimeMessage)
+            );
+            return;
+          }
+
+          realtimeService.subscribeStrategy(clientId, strategyId);
+
+          // On subscribe: log userId and strategyId
+          app.log.info({ userId, strategyId }, "User subscribed to strategy");
+
+          socket.send(
+            JSON.stringify({
+              type: "subscribed_strategy",
+              strategyId,
+            } satisfies ServerRealtimeMessage)
+          );
+        } else if (message.type === "unsubscribe_strategy") {
+          const { strategyId } = message;
+
+          realtimeService.unsubscribeStrategy(clientId, strategyId);
+
+          // On unsubscribe: log userId and strategyId
+          app.log.info({ userId, strategyId }, "User unsubscribed from strategy");
+
+          socket.send(
+            JSON.stringify({
+              type: "unsubscribed_strategy",
+              strategyId,
             } satisfies ServerRealtimeMessage)
           );
         } else {
@@ -89,7 +155,8 @@ export async function realtimeRoutes(app: FastifyInstance) {
       // Cleanup
       // On socket close: log that realtime client disconnected
       socket.on("close", () => {
-        app.log.info({ userId }, "realtime client disconnected");
+        app.log.info({ userId, clientId }, "realtime client disconnected");
+        realtimeService.removeClient(clientId);
       });
     }
   );

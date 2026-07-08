@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetStrategy,
@@ -21,18 +21,29 @@ export const useStrategyDetails = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
+  const [isBackendOffline, setIsBackendOffline] = useState(false);
+  const [consecutiveFailures, setConsecutiveFailures] = useState(0);
+
+  const pollInterval = isBackendOffline ? false : 2000;
+  const fastPollInterval = isBackendOffline ? false : 1000;
+  const queriesEnabled = !isBackendOffline;
+
   const {
     data: strategy,
     isLoading: isStrategyLoading,
     error: strategyError,
-  } = useGetStrategy(id);
+  } = useGetStrategy(id, {
+    enabled: Boolean(id) && queriesEnabled,
+  });
+
   // Poll logs every 2 seconds
   const {
     data: logs = [],
     isLoading: isLogsLoading,
     error: logsError,
   } = useGetStrategyLogs(id, {
-    refetchInterval: 2000,
+    refetchInterval: pollInterval,
+    enabled: Boolean(id) && queriesEnabled,
   });
 
   const realtime = useStrategyRealtime(id);
@@ -44,8 +55,8 @@ export const useStrategyDetails = () => {
     isLoading: isRuntimeStatusLoading,
     error: runtimeStatusError,
   } = useStrategyRuntimeStatus(id, {
-    refetchInterval: realtimeConnected ? false : 1000,
-    enabled: !realtimeConnected,
+    refetchInterval: realtimeConnected ? false : fastPollInterval,
+    enabled: !realtimeConnected && queriesEnabled,
   });
 
   const runtimeStatus = realtime.runtimeStatus ?? restRuntimeStatus;
@@ -54,29 +65,34 @@ export const useStrategyDetails = () => {
   const {
     data: positions = [],
     isLoading: isPositionsLoading,
+    error: positionsError,
   } = useGetPaperPositions({
-    refetchInterval: 2000,
+    refetchInterval: pollInterval,
+    enabled: queriesEnabled,
   });
 
   // Poll paper orders every 2 seconds
   const {
     data: orders = [],
     isLoading: isOrdersLoading,
+    error: ordersError,
   } = useGetPaperOrders({
-    refetchInterval: 2000,
+    refetchInterval: pollInterval,
+    enabled: queriesEnabled,
   });
 
   // Poll live price every 1 second
   const underlyingToken = strategy?.rules?.underlyingToken || "";
   const brokerAccountId = strategy?.brokerAccountId || "";
+  const isRunning = strategy?.status === "RUNNING";
 
   const {
     data: livePriceData,
     isLoading: isLivePriceLoading,
     error: livePriceError,
   } = useLiveLatestTick(brokerAccountId, underlyingToken, {
-    refetchInterval: 1000,
-    enabled: Boolean(brokerAccountId && underlyingToken),
+    refetchInterval: fastPollInterval,
+    enabled: Boolean(isRunning && brokerAccountId && underlyingToken) && queriesEnabled,
     retry: false,
   });
 
@@ -85,7 +101,63 @@ export const useStrategyDetails = () => {
     isLoading: isCandlesLoading,
     isFetching: isCandlesFetching,
     error: candlesError,
-  } = useStrategyCandles(strategy);
+  } = useStrategyCandles(strategy, {
+    enabled: queriesEnabled,
+  });
+
+  // Connection failure logic
+  const strategyErrorObj = strategyError as any;
+  const logsErrorObj = logsError as any;
+  const runtimeStatusErrorObj = runtimeStatusError as any;
+  const livePriceErrorObj = livePriceError as any;
+  const candlesErrorObj = candlesError as any;
+  const positionsErrorObj = positionsError as any;
+  const ordersErrorObj = ordersError as any;
+
+  const isConnError = (err: any) => {
+    if (!err) return false;
+    return (
+      err.code === "ERR_NETWORK" ||
+      !err.response ||
+      err.message?.includes("Network Error") ||
+      err.message?.includes("connection refused") ||
+      err.message?.includes("ERR_CONNECTION_REFUSED")
+    );
+  };
+
+  const hasConnectionError =
+    isConnError(strategyErrorObj) ||
+    isConnError(logsErrorObj) ||
+    isConnError(runtimeStatusErrorObj) ||
+    isConnError(livePriceErrorObj) ||
+    isConnError(candlesErrorObj) ||
+    isConnError(positionsErrorObj) ||
+    isConnError(ordersErrorObj);
+
+  useEffect(() => {
+    if (hasConnectionError) {
+      setConsecutiveFailures((prev) => {
+        const next = prev + 1;
+        if (next >= 5) {
+          setIsBackendOffline(true);
+        }
+        return next;
+      });
+    }
+  }, [hasConnectionError]);
+
+  useEffect(() => {
+    if (realtimeConnected) {
+      setIsBackendOffline(false);
+      setConsecutiveFailures(0);
+    }
+  }, [realtimeConnected]);
+
+  const handleRetry = () => {
+    setConsecutiveFailures(0);
+    setIsBackendOffline(false);
+    queryClient.invalidateQueries();
+  };
 
   const navigate = useNavigate();
 
@@ -225,5 +297,7 @@ export const useStrategyDetails = () => {
     isCandlesFetching,
     candlesError,
     realtimeConnected,
+    isBackendOffline,
+    handleRetry,
   };
 };

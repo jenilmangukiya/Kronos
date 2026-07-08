@@ -13,6 +13,7 @@ class RealtimeClient {
   private handlers = new Set<MessageHandler>();
   private activeStrategySubscriptions = new Set<string>();
   private isConnecting = false;
+  private reconnectTimeout: any = null;
 
   connect() {
     if (this.socket || this.isConnecting) {
@@ -60,6 +61,15 @@ class RealtimeClient {
         this.isConnecting = false;
         this.socket = null;
         console.log("[RealtimeClient] Realtime WebSocket connection closed:", event.code, event.reason);
+
+        // Try to reconnect if we still have handlers (meaning components are still subscribed)
+        if (this.handlers.size > 0) {
+          console.log("[RealtimeClient] Scheduling reconnect in 5 seconds...");
+          if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
+          this.reconnectTimeout = setTimeout(() => {
+            this.connect();
+          }, 5000);
+        }
       };
 
       ws.onerror = (error) => {
@@ -75,6 +85,10 @@ class RealtimeClient {
 
   disconnect() {
     console.log("[RealtimeClient] Disconnecting...");
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
     if (this.socket) {
       this.socket.close();
       this.socket = null;

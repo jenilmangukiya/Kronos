@@ -73,6 +73,8 @@ export const StrategyDetails: React.FC = () => {
     candlesError,
     runtimeStatus,
     realtimeConnected,
+    isBackendOffline,
+    handleRetry,
   } = useStrategyDetails();
 
   const [isConfigExpanded, setIsConfigExpanded] = useState(false);
@@ -319,7 +321,10 @@ export const StrategyDetails: React.FC = () => {
   let conditionStatusText = "-";
   let conditionStatusVariant: "success" | "warning" | "danger" | "info" | "neutral" = "neutral";
 
-  if (priceState.state === "Live" && ltp !== null) {
+  if (!isRunning) {
+    conditionStatusText = "Strategy stopped";
+    conditionStatusVariant = "neutral";
+  } else if (priceState.state === "Live" && ltp !== null) {
     if (ruleType === "UNDERLYING_CROSS_ABOVE") {
       if (ltp >= triggerPrice) {
         conditionStatusText = "Matched";
@@ -347,6 +352,23 @@ export const StrategyDetails: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      {isBackendOffline && (
+        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm p-4 rounded-xl flex items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-400 shrink-0" />
+            <div>
+              <p className="font-semibold text-amber-200">Connection Offline</p>
+              <p className="text-xs text-slate-400">Multiple failed attempts to connect to the backend. Polling paused.</p>
+            </div>
+          </div>
+          <button
+            onClick={handleRetry}
+            className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs transition duration-200"
+          >
+            Retry Connection
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -450,19 +472,29 @@ export const StrategyDetails: React.FC = () => {
                   <Activity className="h-5 w-5 text-emerald-400" />
                   Live Price Card
                 </h3>
-                {isRunning && priceState.state === "Live" && (
-                  <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-semibold uppercase tracking-wider">
+                <span className={`flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${
+                  priceState.badgeVariant === "success"
+                    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                    : priceState.badgeVariant === "danger"
+                    ? "text-rose-400 bg-rose-500/10 border-rose-500/20"
+                    : priceState.badgeVariant === "warning"
+                    ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                    : "text-slate-400 bg-slate-500/10 border-slate-800"
+                }`}>
+                  {priceState.badgeVariant === "success" && (
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-                    Live
-                  </span>
-                )}
+                  )}
+                  {priceState.state}
+                </span>
               </div>
 
               <div className="grid grid-cols-2 gap-6 mt-4">
                 <div>
                   <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">Underlying LTP</span>
-                  <span className="text-3xl font-extrabold text-emerald-400 mt-2 block font-mono">
-                    {ltp !== null ? formatCurrency(ltp) : "Fetching..."}
+                  <span className={`text-3xl font-extrabold mt-2 block font-mono ${
+                    isRunning && ltp !== null ? "text-emerald-400" : "text-slate-400"
+                  }`}>
+                    {isRunning ? (ltp !== null ? formatCurrency(ltp) : "Fetching...") : "--"}
                   </span>
                 </div>
                 <div>
@@ -479,6 +511,25 @@ export const StrategyDetails: React.FC = () => {
                   <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
                   <span>
                     Trigger price is far from current underlying price. Please confirm this is intentional.
+                  </span>
+                </div>
+              )}
+
+              {/* Live Price Error or Disconnected Warning Callout */}
+              {isRunning && priceState.state === "Live Disconnected" && (
+                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs p-3 rounded-lg flex items-start gap-2 shadow-lg shadow-rose-500/5 mt-3">
+                  <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
+                  <span>
+                    Start strategy again or reconnect broker session
+                  </span>
+                </div>
+              )}
+
+              {isRunning && priceState.state === "Broker Session Expired" && (
+                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs p-3 rounded-lg flex items-start gap-2 shadow-lg shadow-rose-500/5 mt-3">
+                  <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
+                  <span>
+                    Broker session expired. Please log in to your broker account again.
                   </span>
                 </div>
               )}

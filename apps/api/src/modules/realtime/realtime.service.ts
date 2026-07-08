@@ -7,6 +7,7 @@ import { StrategyService } from "../strategies/service.js";
 export class RealtimeService {
   private readonly clients = new Map<string, RealtimeClient>();
   private runtimeInterval: NodeJS.Timeout | null = null;
+  private lastP1001LoggedAt = 0;
 
   addClient(userId: string, socket: WebSocket): RealtimeClient {
     const client: RealtimeClient = {
@@ -55,14 +56,42 @@ export class RealtimeService {
     }
   }
 
+  logPerformanceStats(app: FastifyInstance): void {
+    const activeClientsCount = this.clients.size;
+    let totalSubscribed = 0;
+    for (const c of this.clients.values()) {
+      totalSubscribed += c.subscribedStrategyIds.size;
+    }
+    app.log.info(
+      `[Performance] Active WS clients: ${activeClientsCount}, Subscribed strategies: ${totalSubscribed}, Broadcasts/sec: ${totalSubscribed}`
+    );
+  }
+
   startRuntimeStatusBroadcast(app: FastifyInstance): void {
     if (this.runtimeInterval) {
       return;
     }
 
+    app.log.info("[Realtime] Runtime broadcaster started");
+
     const strategyService = new StrategyService(app, app.db);
 
     this.runtimeInterval = setInterval(async () => {
+      // If no clients or no subscribed strategies, skip work
+      if (this.clients.size === 0) {
+        return;
+      }
+      let hasSubscriptions = false;
+      for (const client of this.clients.values()) {
+        if (client.subscribedStrategyIds.size > 0) {
+          hasSubscriptions = true;
+          break;
+        }
+      }
+      if (!hasSubscriptions) {
+        return;
+      }
+
       // Loop over all connected clients safely using entries
       for (const [clientId, client] of Array.from(this.clients.entries())) {
         if (client.socket.readyState !== WebSocket.OPEN) {
@@ -83,15 +112,37 @@ export class RealtimeService {
               data: runtimeStatus,
             });
           } catch (error) {
-            app.log.error(
-              { userId: client.userId, strategyId, error },
-              "Error loading strategy runtime status for realtime stream"
+            const isP1001 = error && (
+              (error as any).code === "P1001" ||
+              (error as any).message?.includes("P1001") ||
+              (error as any).message?.includes("Can't reach database server")
             );
-            this.send(client, {
-              type: "strategy_runtime_status_error",
-              strategyId,
-              message: "Unable to load runtime status",
-            });
+
+            if (isP1001) {
+              const now = Date.now();
+              if (now - this.lastP1001LoggedAt > 60000) {
+                this.lastP1001LoggedAt = now;
+                app.log.error(
+                  { userId: client.userId, strategyId, errorCode: "P1001" },
+                  "Database connection error (P1001) during strategy runtime status broadcast (throttled)"
+                );
+              }
+              this.send(client, {
+                type: "strategy_runtime_status_error",
+                strategyId,
+                message: "Database connection failed. Please check if database is running.",
+              });
+            } else {
+              app.log.error(
+                { userId: client.userId, strategyId, error },
+                "Error loading strategy runtime status for realtime stream"
+              );
+              this.send(client, {
+                type: "strategy_runtime_status_error",
+                strategyId,
+                message: "Unable to load runtime status",
+              });
+            }
           }
         }
       }
@@ -105,3 +156,14 @@ export class RealtimeService {
     }
   }
 }
+
+const globalForRealtime = globalThis as {
+  realtimeService?: RealtimeService;
+};
+
+export const realtimeService = globalForRealtime.realtimeService ?? new RealtimeService();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForRealtime.realtimeService = realtimeService;
+}
+

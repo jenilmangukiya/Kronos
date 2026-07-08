@@ -72,7 +72,7 @@ export const useLiveLatestManyTicks = (
   options?: Partial<UseQueryOptions<LatestTicksResponse, AxiosError>>
 ) =>
   useQuery<LatestTicksResponse, AxiosError>({
-    queryKey: ["market-data", "live-latest-many", brokerAccountId, tokens],
+    queryKey: ["market-data", "live-latest-many", brokerAccountId, tokens.join(",")],
     queryFn: () => getLatestManyTicks(brokerAccountId, tokens),
     enabled: Boolean(brokerAccountId && tokens.length > 0) && (options?.enabled ?? true),
     ...options,

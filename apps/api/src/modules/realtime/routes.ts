@@ -2,11 +2,10 @@ import { FastifyInstance } from "fastify";
 import type { RawData } from "ws";
 import { JwtService } from "../../services/jwt.service.js";
 import { ClientRealtimeMessage, ServerRealtimeMessage } from "./realtime.types.js";
-import { RealtimeService } from "./realtime.service.js";
+import { realtimeService } from "./realtime.service.js";
 
 export async function realtimeRoutes(app: FastifyInstance) {
   const jwtService = new JwtService();
-  const realtimeService = new RealtimeService();
 
   // Register broadcaster
   realtimeService.startRuntimeStatusBroadcast(app);
@@ -53,8 +52,9 @@ export async function realtimeRoutes(app: FastifyInstance) {
       const client = realtimeService.addClient(userId, socket);
       const clientId = client.id;
 
-      // On connection: log userId connected
+      // On connection: log userId connected & performance stats
       app.log.info({ userId, clientId }, "realtime client connected");
+      realtimeService.logPerformanceStats(app);
 
       // Handle messages
       socket.on("message", async (rawMessage: RawData) => {
@@ -71,93 +71,107 @@ export async function realtimeRoutes(app: FastifyInstance) {
           return;
         }
 
-        if (!parsed || typeof parsed !== "object" || !("type" in parsed)) {
-          socket.send(
-            JSON.stringify({
-              type: "error",
-              message: "Invalid message format",
-            } satisfies ServerRealtimeMessage)
-          );
-          return;
-        }
-
-        // On message: update client.lastSeenAt
-        const currentClient = realtimeService.getClient(clientId);
-        if (currentClient) {
-          currentClient.lastSeenAt = new Date();
-        }
-
-        const message = parsed as ClientRealtimeMessage;
-
-        if (message.type === "ping") {
-          socket.send(
-            JSON.stringify({
-              type: "pong",
-              ts: Date.now(),
-            } satisfies ServerRealtimeMessage)
-          );
-        } else if (message.type === "subscribe_strategy") {
-          const { strategyId } = message;
-
-          // Verify strategy belongs to user before subscribing
-          const strategy = await app.db.strategy.findFirst({
-            where: {
-              id: strategyId,
-              userId,
-            },
-          });
-
-          if (!strategy) {
+        try {
+          if (!parsed || typeof parsed !== "object" || !("type" in parsed)) {
             socket.send(
               JSON.stringify({
                 type: "error",
-                message: "Strategy not found",
+                message: "Invalid message format",
               } satisfies ServerRealtimeMessage)
             );
             return;
           }
 
-          realtimeService.subscribeStrategy(clientId, strategyId);
+          // On message: update client.lastSeenAt
+          const currentClient = realtimeService.getClient(clientId);
+          if (currentClient) {
+            currentClient.lastSeenAt = new Date();
+          }
 
-          // On subscribe: log userId and strategyId
-          app.log.info({ userId, strategyId }, "User subscribed to strategy");
+          const message = parsed as ClientRealtimeMessage;
 
-          socket.send(
-            JSON.stringify({
-              type: "subscribed_strategy",
-              strategyId,
-            } satisfies ServerRealtimeMessage)
-          );
-        } else if (message.type === "unsubscribe_strategy") {
-          const { strategyId } = message;
+          if (message.type === "ping") {
+            socket.send(
+              JSON.stringify({
+                type: "pong",
+                ts: Date.now(),
+              } satisfies ServerRealtimeMessage)
+            );
+          } else if (message.type === "subscribe_strategy") {
+            const { strategyId } = message;
 
-          realtimeService.unsubscribeStrategy(clientId, strategyId);
+            // Verify strategy belongs to user before subscribing
+            const strategy = await app.db.strategy.findFirst({
+              where: {
+                id: strategyId,
+                userId,
+              },
+            });
 
-          // On unsubscribe: log userId and strategyId
-          app.log.info({ userId, strategyId }, "User unsubscribed from strategy");
+            if (!strategy) {
+              socket.send(
+                JSON.stringify({
+                  type: "error",
+                  message: "Strategy not found",
+                } satisfies ServerRealtimeMessage)
+              );
+              return;
+            }
 
-          socket.send(
-            JSON.stringify({
-              type: "unsubscribed_strategy",
-              strategyId,
-            } satisfies ServerRealtimeMessage)
-          );
-        } else {
+            realtimeService.subscribeStrategy(clientId, strategyId);
+
+            // On subscribe: log userId, strategyId & performance stats
+            app.log.info({ userId, strategyId }, "User subscribed to strategy");
+            realtimeService.logPerformanceStats(app);
+
+            socket.send(
+              JSON.stringify({
+                type: "subscribed_strategy",
+                strategyId,
+              } satisfies ServerRealtimeMessage)
+            );
+          } else if (message.type === "unsubscribe_strategy") {
+            const { strategyId } = message;
+
+            realtimeService.unsubscribeStrategy(clientId, strategyId);
+
+            // On unsubscribe: log userId, strategyId & performance stats
+            app.log.info({ userId, strategyId }, "User unsubscribed from strategy");
+            realtimeService.logPerformanceStats(app);
+
+            socket.send(
+              JSON.stringify({
+                type: "unsubscribed_strategy",
+                strategyId,
+              } satisfies ServerRealtimeMessage)
+            );
+          } else {
+            socket.send(
+              JSON.stringify({
+                type: "error",
+                message: "Unknown message type",
+              } satisfies ServerRealtimeMessage)
+            );
+          }
+        } catch (error) {
+          app.log.error({ error }, "Error handling websocket message");
           socket.send(
             JSON.stringify({
               type: "error",
-              message: "Unknown message type",
+              message: "Internal server error occurred",
             } satisfies ServerRealtimeMessage)
           );
         }
       });
 
       // Cleanup
-      // On socket close: log that realtime client disconnected
+      // On socket close: log that realtime client disconnected & performance stats
       socket.on("close", () => {
         app.log.info({ userId, clientId }, "realtime client disconnected");
         realtimeService.removeClient(clientId);
+        realtimeService.logPerformanceStats(app);
       });
     }
   );
 }
+

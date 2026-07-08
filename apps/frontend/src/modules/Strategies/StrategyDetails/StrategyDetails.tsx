@@ -278,7 +278,9 @@ export const StrategyDetails: React.FC = () => {
   const markers = getMarkersFromOrders(candles, strategyOrders);
 
   // Live Price Calculation & Proximity Warning
-  const ltp = livePriceData?.tick?.ltp ?? null;
+  const ltp = runtimeStatus?.liveTick
+    ? (runtimeStatus.liveTick.ltp ?? null)
+    : (livePriceData?.tick?.ltp ?? null);
   const triggerPrice = strategy.rules.triggerPrice;
   const ruleType = strategy.rules.type;
 
@@ -291,6 +293,14 @@ export const StrategyDetails: React.FC = () => {
     if (!isRunning) {
       return { state: "Not Started", badgeVariant: "neutral" as const };
     }
+
+    if (realtimeConnected && runtimeStatus) {
+      if (runtimeStatus.liveTick?.ltp !== undefined && runtimeStatus.liveTick?.ltp !== null) {
+        return { state: "Live", badgeVariant: "success" as const };
+      }
+      return { state: "No Tick Yet", badgeVariant: "warning" as const };
+    }
+
     if (livePriceError) {
       const errorData = (livePriceError as any)?.response?.data;
       const errorCode = errorData?.code || errorData?.errorCode || errorData?.message;
@@ -304,7 +314,7 @@ export const StrategyDetails: React.FC = () => {
       ) {
         return { state: "Live Disconnected", badgeVariant: "danger" as const };
       }
-      return { state: "Error", badgeVariant: "danger" as const };
+      return { state: "Live Disconnected", badgeVariant: "danger" as const };
     }
     if (!livePriceData) {
       return { state: "Connecting", badgeVariant: "warning" as const };
@@ -324,6 +334,10 @@ export const StrategyDetails: React.FC = () => {
   if (!isRunning) {
     conditionStatusText = "Strategy stopped";
     conditionStatusVariant = "neutral";
+  } else if (runtimeStatus?.condition !== undefined && runtimeStatus?.condition !== null) {
+    const isMatched = runtimeStatus.condition.matched;
+    conditionStatusText = isMatched ? "Matched" : "Waiting";
+    conditionStatusVariant = isMatched ? "success" : "warning";
   } else if (priceState.state === "Live" && ltp !== null) {
     if (ruleType === "UNDERLYING_CROSS_ABOVE") {
       if (ltp >= triggerPrice) {
@@ -343,7 +357,7 @@ export const StrategyDetails: React.FC = () => {
       }
     }
   } else {
-    conditionStatusText = priceState.state;
+    conditionStatusText = priceState.state === "No Tick Yet" && realtimeConnected ? "Waiting for live tick" : priceState.state;
     conditionStatusVariant = priceState.badgeVariant;
   }
 
@@ -494,7 +508,7 @@ export const StrategyDetails: React.FC = () => {
                   <span className={`text-3xl font-extrabold mt-2 block font-mono ${
                     isRunning && ltp !== null ? "text-emerald-400" : "text-slate-400"
                   }`}>
-                    {isRunning ? (ltp !== null ? formatCurrency(ltp) : "Fetching...") : "--"}
+                    {isRunning ? (ltp !== null ? formatCurrency(ltp) : (realtimeConnected ? "Waiting for live tick" : "Fetching...")) : "--"}
                   </span>
                 </div>
                 <div>
@@ -544,8 +558,13 @@ export const StrategyDetails: React.FC = () => {
               </div>
               <div>
                 <span className="text-slate-400 block text-xs font-medium uppercase tracking-wider">Condition Status</span>
-                <div className="mt-1">
+                <div className="mt-1 flex flex-col gap-1 items-start">
                   <Badge variant={conditionStatusVariant}>{conditionStatusText}</Badge>
+                  {isRunning && runtimeStatus?.reason && (
+                    <span className="text-[10px] text-slate-500 leading-tight block mt-1" title={runtimeStatus.reason}>
+                      {runtimeStatus.reason}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

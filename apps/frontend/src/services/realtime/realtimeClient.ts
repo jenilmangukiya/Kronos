@@ -14,6 +14,8 @@ class RealtimeClient {
   private activeStrategySubscriptions = new Set<string>();
   private isConnecting = false;
   private reconnectTimeout: any = null;
+  private reconnectAttempts = 0;
+  private readonly MAX_RECONNECT_ATTEMPTS = 5;
 
   connect() {
     if (this.socket || this.isConnecting) {
@@ -31,6 +33,10 @@ class RealtimeClient {
     const wsUrl = `${getWsUrl()}?token=${encodeURIComponent(token)}`;
     console.log("[RealtimeClient] Connecting to:", wsUrl);
 
+    if (import.meta.env.DEV) {
+      console.log("WS connecting");
+    }
+
     try {
       const ws = new WebSocket(wsUrl);
       this.socket = ws;
@@ -38,11 +44,17 @@ class RealtimeClient {
       ws.onopen = () => {
         if (this.socket !== ws) return;
         this.isConnecting = false;
+        this.reconnectAttempts = 0;
+        
         console.log("[RealtimeClient] Realtime WebSocket connection established");
+        if (import.meta.env.DEV) {
+          console.log("WS connected");
+        }
+        
         console.log("[RealtimeClient] Active subscriptions to re-send:", Array.from(this.activeStrategySubscriptions));
         // Re-subscribe all active strategies
         this.activeStrategySubscriptions.forEach((strategyId) => {
-          this.send({ type: "subscribe_strategy", strategyId });
+          this.sendSubscribe(strategyId);
         });
       };
 
@@ -61,14 +73,20 @@ class RealtimeClient {
         this.isConnecting = false;
         this.socket = null;
         console.log("[RealtimeClient] Realtime WebSocket connection closed:", event.code, event.reason);
+        if (import.meta.env.DEV) {
+          console.log("WS disconnected");
+        }
 
-        // Try to reconnect if we still have handlers (meaning components are still subscribed)
-        if (this.handlers.size > 0) {
-          console.log("[RealtimeClient] Scheduling reconnect in 5 seconds...");
+        // Try to reconnect if we still have handlers (meaning components are still subscribed) and we haven't exceeded limit
+        if (this.handlers.size > 0 && this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
+          this.reconnectAttempts++;
+          console.log(`[RealtimeClient] Scheduling reconnect (attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS}) in 5 seconds...`);
           if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
           this.reconnectTimeout = setTimeout(() => {
             this.connect();
           }, 5000);
+        } else if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+          console.warn("[RealtimeClient] Max reconnect attempts reached. Stopping reconnection.");
         }
       };
 
@@ -108,8 +126,16 @@ class RealtimeClient {
     }
   }
 
+  sendSubscribe(strategyId: string) {
+    if (import.meta.env.DEV) {
+      console.log("WS subscribed strategy");
+    }
+    this.send({ type: "subscribe_strategy", strategyId });
+  }
+
   subscribe(handler: MessageHandler) {
     this.handlers.add(handler);
+    this.reconnectAttempts = 0;
     this.connect();
   }
 
@@ -123,7 +149,7 @@ class RealtimeClient {
   subscribeStrategy(strategyId: string) {
     this.activeStrategySubscriptions.add(strategyId);
     if (this.isConnected()) {
-      this.send({ type: "subscribe_strategy", strategyId });
+      this.sendSubscribe(strategyId);
     }
   }
 

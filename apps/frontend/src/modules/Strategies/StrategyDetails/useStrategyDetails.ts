@@ -92,7 +92,13 @@ export const useStrategyDetails = () => {
     error: livePriceError,
   } = useLiveLatestTick(brokerAccountId, underlyingToken, {
     refetchInterval: fastPollInterval,
-    enabled: Boolean(isRunning && brokerAccountId && underlyingToken) && queriesEnabled,
+    enabled:
+      Boolean(
+        strategy?.status === "RUNNING" &&
+        strategy?.brokerAccountId &&
+        underlyingToken &&
+        !realtimeConnected
+      ) && queriesEnabled,
     retry: false,
   });
 
@@ -119,6 +125,7 @@ export const useStrategyDetails = () => {
     return (
       err.code === "ERR_NETWORK" ||
       !err.response ||
+      err.response.status === 500 ||
       err.message?.includes("Network Error") ||
       err.message?.includes("connection refused") ||
       err.message?.includes("ERR_CONNECTION_REFUSED")
@@ -273,7 +280,7 @@ export const useStrategyDetails = () => {
     isLivePriceLoading,
     runtimeStatus,
     isRuntimeStatusLoading,
-    error: error || (runtimeStatusError ? ((runtimeStatusError as any).response?.data?.message || (runtimeStatusError as any).message) : null),
+    error: error || (runtimeStatusError ? ((runtimeStatusError as any).response?.data?.message || (runtimeStatusError as any).message) : null) || realtime.error,
     actionError,
     setActionError,
     handleStart,

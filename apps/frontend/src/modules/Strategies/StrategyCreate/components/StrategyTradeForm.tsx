@@ -32,6 +32,10 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
 
   const lotSize = form.symbol === "BANKNIFTY" ? 15 : form.symbol === "NIFTY" ? 65 : 1;
 
+  const selectedFutureContract = futures.find((f) => f.token === form.tradeToken);
+  const futureExpiry = selectedFutureContract?.expiry || "";
+  const futureLotSize = selectedFutureContract?.lotSize || lotSize;
+
   // Default selected strike to ATM when option chain loads
   useEffect(() => {
     if (!isFuture && optionChain?.rows && optionChain.rows.length > 0) {
@@ -70,10 +74,12 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
       onChange("tradeToken", contract.token);
       onChange("tradeSymbol", contract.symbol);
       onChange("tradeQuantity", contract.lotSize);
+      onChange("tradeLots", 1);
     } else {
       onChange("tradeToken", "");
       onChange("tradeSymbol", "");
       onChange("tradeQuantity", 0);
+      onChange("tradeLots", 0);
     }
   };
 
@@ -110,28 +116,18 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
         />
 
         {/* Quantity / Lots */}
-        {isFuture ? (
+        <div className="w-full">
           <Input
-            label="Order Quantity (Lots / Units)"
+            label="Order Quantity (Lots)"
             type="number"
-            placeholder="e.g. 65"
-            value={form.tradeQuantity || ""}
-            onChange={(e) => onChange("tradeQuantity", parseInt(e.target.value) || 0)}
+            placeholder="e.g. 1"
+            value={form.tradeLots || ""}
+            onChange={(e) => onChange("tradeLots", parseInt(e.target.value) || 0)}
           />
-        ) : (
-          <div className="w-full">
-            <Input
-              label="Order Quantity (Lots)"
-              type="number"
-              placeholder="e.g. 1"
-              value={form.tradeLots || ""}
-              onChange={(e) => onChange("tradeLots", parseInt(e.target.value) || 0)}
-            />
-            <div className="text-xs text-slate-400 mt-1.5 font-medium">
-              1 lot = {lotSize} qty (Total: {(form.tradeLots || 0) * lotSize} qty)
-            </div>
+          <div className="text-xs text-slate-400 mt-1.5 font-medium">
+            1 lot = {isFuture ? futureLotSize : lotSize} qty (Total: {(form.tradeLots || 0) * (isFuture ? futureLotSize : lotSize)} qty)
           </div>
-        )}
+        </div>
 
         {isFuture ? (
           /* FUTURE Layout */
@@ -205,19 +201,58 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
         {/* Selected asset details preview and Strategy summary preview */}
         {form.tradeToken && form.tradeSymbol && (
           <div className="sm:col-span-2 space-y-4">
-            <div className="bg-slate-900/60 border border-indigo-500/10 rounded-xl p-4 text-xs space-y-1.5 text-slate-400">
-              <span className="font-bold text-slate-300 block mb-1">Target Execution Asset:</span>
-              <div>
-                Symbol: <span className="font-mono text-indigo-400 font-bold">{form.tradeSymbol}</span>
-              </div>
-              <div>
-                Token ID: <span className="font-mono">{form.tradeToken}</span>
-              </div>
-              {optionChain?.underlying?.ltp && !isFuture && (
+            <div className="bg-slate-955/90 border border-slate-800/80 rounded-xl p-5 space-y-4 shadow-xl">
+              <span className="font-bold text-slate-200 text-sm block border-b border-slate-800 pb-2 flex items-center gap-2">
+                {isFuture ? (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+                    ⚡ Future Contract Preview
+                  </>
+                ) : (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+                    🎯 Option Contract Preview
+                  </>
+                )}
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs leading-relaxed text-slate-400">
                 <div>
-                  Underlying Index LTP: ₹{optionChain.underlying.ltp.toLocaleString("en-IN")}
+                  <span className="text-slate-500 block mb-0.5">Symbol</span>
+                  <span className="font-mono text-indigo-400 font-bold">{form.tradeSymbol}</span>
                 </div>
-              )}
+                <div>
+                  <span className="text-slate-500 block mb-0.5">Token</span>
+                  <span className="font-mono text-slate-300 font-semibold">{form.tradeToken}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block mb-0.5">Expiry</span>
+                  <span className="text-slate-300 font-semibold">{isFuture ? futureExpiry || "N/A" : form.tradeExpiry || "N/A"}</span>
+                </div>
+                {!isFuture ? (
+                  <>
+                    <div>
+                      <span className="text-slate-500 block mb-0.5">Strike</span>
+                      <span className="text-slate-300 font-semibold">₹{Number(form.tradeStrike).toLocaleString("en-IN")}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block mb-0.5">Option Type</span>
+                      <span className={`font-bold ${form.tradeOptionType === "CE" ? "text-emerald-400" : "text-rose-400"}`}>
+                        {form.tradeOptionType === "CE" ? "Call (CE)" : "Put (PE)"}
+                      </span>
+                    </div>
+                  </>
+                ) : null}
+                <div>
+                  <span className="text-slate-500 block mb-0.5">Lot Size</span>
+                  <span className="text-slate-300 font-semibold">{isFuture ? futureLotSize : lotSize}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block mb-0.5">Quantity</span>
+                  <span className="text-slate-300 font-semibold font-mono">
+                    {form.tradeLots || 0} Lot{(form.tradeLots || 0) > 1 ? "s" : ""} ({(form.tradeLots || 0) * (isFuture ? futureLotSize : lotSize)} Qty)
+                  </span>
+                </div>
+              </div>
             </div>
 
             {form.triggerPrice > 0 && (
@@ -242,11 +277,9 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
                     {form.tradeSide}
                   </span>{" "}
                   <span className="font-bold text-indigo-400 font-mono">{form.tradeSymbol}</span>
-                  {!isFuture && (
-                    <span className="text-slate-400 text-xs ml-1.5 font-normal">
-                      ({form.tradeLots || 0} Lot{(form.tradeLots || 0) > 1 ? "s" : ""} = {(form.tradeLots || 0) * lotSize} qty)
-                    </span>
-                  )}
+                  <span className="text-slate-400 text-xs ml-1.5 font-normal font-mono">
+                    ({form.tradeLots || 0} Lot{(form.tradeLots || 0) > 1 ? "s" : ""} = {(form.tradeLots || 0) * (isFuture ? futureLotSize : lotSize)} Qty)
+                  </span>
                 </div>
               </div>
             )}

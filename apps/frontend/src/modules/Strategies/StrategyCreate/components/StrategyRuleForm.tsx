@@ -1,4 +1,5 @@
 import React from "react";
+import { AlertCircle } from "lucide-react";
 import { Select } from "../../../../components/ui/Select";
 import { Input } from "../../../../components/ui/Input";
 import { StrategyFormValues } from "../types";
@@ -7,9 +8,16 @@ import { RULE_TYPE_OPTIONS, UNDERLYING_TOKENS } from "../constants";
 interface StrategyRuleFormProps {
   form: StrategyFormValues;
   onChange: (field: keyof StrategyFormValues, value: any) => void;
+  underlyingLtp?: number;
+  triggerPriceWarning: string | null;
 }
 
-export const StrategyRuleForm: React.FC<StrategyRuleFormProps> = ({ form, onChange }) => {
+export const StrategyRuleForm: React.FC<StrategyRuleFormProps> = ({
+  form,
+  onChange,
+  underlyingLtp,
+  triggerPriceWarning,
+}) => {
   const underlying = UNDERLYING_TOKENS[form.symbol];
 
   return (
@@ -25,13 +33,26 @@ export const StrategyRuleForm: React.FC<StrategyRuleFormProps> = ({ form, onChan
           onChange={(e) => onChange("ruleType", e.target.value)}
         />
 
-        <Input
-          label="Spot Trigger Price (₹)"
-          type="number"
-          placeholder="e.g. 24200"
-          value={form.triggerPrice || ""}
-          onChange={(e) => onChange("triggerPrice", parseFloat(e.target.value) || 0)}
-        />
+        <div className="w-full">
+          <Input
+            label="Spot Trigger Price (₹)"
+            type="number"
+            placeholder="e.g. 24200"
+            value={form.triggerPrice || ""}
+            onChange={(e) => onChange("triggerPrice", parseFloat(e.target.value) || 0)}
+          />
+          {underlyingLtp !== undefined && (
+            <div className="text-slate-400 text-[11px] mt-1.5 font-medium">
+              Current {form.symbol} Spot LTP: ₹{underlyingLtp.toLocaleString("en-IN")}
+            </div>
+          )}
+          {triggerPriceWarning && (
+            <div className="text-amber-400 text-xs mt-2.5 flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl leading-relaxed shadow-lg shadow-amber-500/5">
+              <AlertCircle className="h-4.5 w-4.5 shrink-0 text-amber-500" />
+              <span>{triggerPriceWarning}</span>
+            </div>
+          )}
+        </div>
 
         <div className="sm:col-span-2 bg-slate-900/40 border border-slate-800/80 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs text-slate-400 select-none">
           <div>

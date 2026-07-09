@@ -29,6 +29,9 @@ export const StrategyCreate: React.FC = () => {
     isCreating,
     validationError,
     isEditMode,
+    underlyingLtp,
+    triggerPriceWarning,
+    isSubmitDisabled,
   } = useStrategyCreate();
 
   if (isAccountsLoading) {
@@ -149,7 +152,12 @@ export const StrategyCreate: React.FC = () => {
       <Card className="border-slate-800 bg-slate-900/40 p-6 space-y-8">
         <StrategyBasicForm form={form} onChange={setFieldValue} />
 
-        <StrategyRuleForm form={form} onChange={setFieldValue} />
+        <StrategyRuleForm
+          form={form}
+          onChange={setFieldValue}
+          underlyingLtp={underlyingLtp}
+          triggerPriceWarning={triggerPriceWarning}
+        />
 
         <StrategyTradeForm
           form={form}
@@ -171,7 +179,12 @@ export const StrategyCreate: React.FC = () => {
               Cancel
             </Button>
           </Link>
-          <Button variant="primary" loading={isCreating} onClick={handleCreate}>
+          <Button
+            variant="primary"
+            loading={isCreating}
+            onClick={handleCreate}
+            disabled={isSubmitDisabled}
+          >
             {isEditMode ? "Update Strategy" : "Create Strategy"}
           </Button>
         </div>

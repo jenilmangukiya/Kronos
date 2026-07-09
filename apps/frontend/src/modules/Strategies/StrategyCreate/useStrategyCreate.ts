@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useBrokerAccounts } from "../../../services/broker/BrokerQueries";
 import { useCreateStrategy, useGetStrategy, useUpdateStrategy } from "../../../services/strategies/StrategyQueries";
-import { useGetFutures, useOptionExpiries, useOptionChainQuery } from "../../../services/market-data/MarketDataQueries";
+import { useGetFutures, useOptionExpiries, useOptionChainQuery, useLiveLatestTick } from "../../../services/market-data/MarketDataQueries";
 import { UNDERLYING_TOKENS } from "./constants";
 import { StrategyFormValues } from "./types";
 import { CreateStrategyRequest } from "../../../services/strategies/StrategyService";
@@ -77,6 +77,48 @@ export const useStrategyCreate = () => {
     { enabled: Boolean(brokerAccountId && isOption && form.tradeExpiry) }
   );
 
+  const underlyingToken = UNDERLYING_TOKENS[form.symbol]?.token;
+  const { data: underlyingTick } = useLiveLatestTick(brokerAccountId, underlyingToken, {
+    enabled: Boolean(brokerAccountId && underlyingToken),
+    refetchInterval: 5000,
+  });
+
+  const underlyingLtp = underlyingTick?.tick?.ltp || (!isOption ? undefined : optionChain?.underlying?.ltp);
+
+  const triggerPriceWarning = (() => {
+    if (!underlyingLtp || form.triggerPrice <= 0) return null;
+    const diffPercent = (Math.abs(form.triggerPrice - underlyingLtp) / underlyingLtp) * 100;
+    if (diffPercent > 5) {
+      return "Trigger price is far from current underlying price. This may trigger immediately or never trigger.";
+    }
+    return null;
+  })();
+
+  const isSubmitDisabled = (() => {
+    if (!form.name || !form.name.trim()) return true;
+    if (!form.triggerPrice || Number(form.triggerPrice) <= 0) return true;
+    if (form.maxTradesPerDay === undefined || form.maxTradesPerDay === null || (form.maxTradesPerDay as any) === "" || Number(form.maxTradesPerDay) < 1) return true;
+    if (!form.reEntryMode) return true;
+
+    if (form.stopLossPercent !== undefined && form.stopLossPercent !== null && (form.stopLossPercent as any) !== "" && Number(form.stopLossPercent) <= 0) return true;
+    if (form.targetPercent !== undefined && form.targetPercent !== null && (form.targetPercent as any) !== "" && Number(form.targetPercent) <= 0) return true;
+
+    if (form.instrumentType === "FUTURE") {
+      if (!form.tradeToken || !form.tradeSymbol) return true;
+      if (!form.tradeLots || Number(form.tradeLots) < 1) return true;
+    } else if (form.instrumentType === "OPTION") {
+      if (!form.tradeExpiry) return true;
+      if (!form.tradeStrike) return true;
+      if (!form.tradeOptionType) return true;
+      if (!form.tradeToken || !form.tradeSymbol) return true;
+      if (!form.tradeLots || Number(form.tradeLots) < 1) return true;
+    } else {
+      return true;
+    }
+
+    return false;
+  })();
+
   const createMutation = useCreateStrategy();
   const updateMutation = useUpdateStrategy();
 
@@ -90,6 +132,8 @@ export const useStrategyCreate = () => {
       let parsedLots = 1;
 
       const lotSize = existingStrategy.symbol === "BANKNIFTY" ? 15 : existingStrategy.symbol === "NIFTY" ? 65 : 1;
+      parsedLots = Math.round(existingStrategy.trade.quantity / lotSize);
+      if (parsedLots < 1) parsedLots = 1;
 
       if (isOpt && existingStrategy.trade.symbol) {
         const tradeSymbol = existingStrategy.trade.symbol;
@@ -100,7 +144,6 @@ export const useStrategyCreate = () => {
           parsedExpiry = match[2] || "";
           parsedStrike = match[3] || "";
         }
-        parsedLots = Math.round(existingStrategy.trade.quantity / lotSize);
       }
 
       const prefilledForm: StrategyFormValues = {
@@ -171,7 +214,7 @@ export const useStrategyCreate = () => {
   const handleCreate = async () => {
     setValidationError(null);
 
-    // Basic validation
+    // Basic validation before submit
     if (!form.name.trim()) {
       setValidationError("Strategy name is required");
       return;
@@ -180,14 +223,22 @@ export const useStrategyCreate = () => {
       setValidationError("Trigger price must be greater than 0");
       return;
     }
-
-    // Stop Loss / Target validation
-    if (form.stopLossPercent !== undefined && Number(form.stopLossPercent) <= 0) {
-      setValidationError("Stop loss percent must be greater than 0");
+    if (form.maxTradesPerDay === undefined || form.maxTradesPerDay === null || (form.maxTradesPerDay as any) === "" || Number(form.maxTradesPerDay) < 1) {
+      setValidationError("Max trades per day must be at least 1");
       return;
     }
-    if (form.targetPercent !== undefined && Number(form.targetPercent) <= 0) {
-      setValidationError("Target percent must be greater than 0");
+    if (!form.reEntryMode) {
+      setValidationError("Re-entry mode is required");
+      return;
+    }
+
+    // Stop Loss / Target validation
+    if (form.stopLossPercent !== undefined && form.stopLossPercent !== null && (form.stopLossPercent as any) !== "" && Number(form.stopLossPercent) <= 0) {
+      setValidationError("Stop loss percent must be greater than 0 if filled");
+      return;
+    }
+    if (form.targetPercent !== undefined && form.targetPercent !== null && (form.targetPercent as any) !== "" && Number(form.targetPercent) <= 0) {
+      setValidationError("Target percent must be greater than 0 if filled");
       return;
     }
 
@@ -204,30 +255,33 @@ export const useStrategyCreate = () => {
         setValidationError("Option type is required");
         return;
       }
-      if (!form.tradeLots || form.tradeLots <= 0) {
-        setValidationError("Lots must be greater than 0");
+      if (!form.tradeToken || !form.tradeSymbol) {
+        setValidationError("Option contract token is required");
         return;
       }
+      if (!form.tradeLots || Number(form.tradeLots) < 1) {
+        setValidationError("Lots must be greater than or equal to 1");
+        return;
+      }
+    } else if (form.instrumentType === "FUTURE") {
       if (!form.tradeToken || !form.tradeSymbol) {
-        setValidationError("No option contract found for selected expiry/strike/type.");
+        setValidationError("Future contract is required");
+        return;
+      }
+      if (!form.tradeLots || Number(form.tradeLots) < 1) {
+        setValidationError("Lots must be greater than or equal to 1");
         return;
       }
     } else {
-      if (!form.tradeToken || !form.tradeSymbol) {
-        setValidationError("Please select a contract or trade asset for execution");
-        return;
-      }
-      if (form.tradeQuantity <= 0) {
-        setValidationError("Trade quantity must be greater than 0");
-        return;
-      }
+      setValidationError("Invalid instrument type selected");
+      return;
     }
 
     const underlying = UNDERLYING_TOKENS[form.symbol];
     const lotSize = form.symbol === "BANKNIFTY" ? 15 : form.symbol === "NIFTY" ? 65 : 1;
-    const quantity = form.instrumentType === "OPTION"
-      ? (form.tradeLots || 0) * lotSize
-      : Number(form.tradeQuantity);
+    const futureContract = futures.find((f) => f.token === form.tradeToken);
+    const resolvedLotSize = form.instrumentType === "FUTURE" && futureContract ? futureContract.lotSize : lotSize;
+    const quantity = (form.tradeLots || 0) * resolvedLotSize;
 
     const body: CreateStrategyRequest = {
       brokerAccountId,
@@ -271,7 +325,8 @@ export const useStrategyCreate = () => {
         }
       }
     } catch (err: any) {
-      setValidationError(err?.response?.data?.message || err?.message || `Failed to ${isEditMode ? "update" : "create"} strategy`);
+      const serverMessage = err?.response?.data?.error?.message || err?.response?.data?.message;
+      setValidationError(serverMessage || err?.message || `Failed to ${isEditMode ? "update" : "create"} strategy`);
     }
   };
 
@@ -291,5 +346,8 @@ export const useStrategyCreate = () => {
     validationError,
     setValidationError,
     isEditMode,
+    underlyingLtp,
+    triggerPriceWarning,
+    isSubmitDisabled,
   };
 };

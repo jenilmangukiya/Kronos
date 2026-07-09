@@ -28,6 +28,7 @@ import {
   formatInstrumentType,
   formatReEntryMode,
 } from "./helpers";
+import { getStrategyTypeConfig } from "../strategyTypes";
 
 const getStatusBadgeProps = (reason: string, canEnter: boolean) => {
   if (canEnter) {
@@ -391,10 +392,13 @@ export const StrategyDetails: React.FC = () => {
   }
 
   // Create collapsible summary description in one line
+  const strategyConfig = getStrategyTypeConfig(strategy.strategyType);
+  const strategySpecificSummary = strategyConfig?.getSummaryText ? strategyConfig.getSummaryText(strategy) : "";
+
   const configSummaryText = [
     formatStrategyType(strategy.strategyType),
     formatInstrumentType(strategy.instrumentType),
-    `Spot ${strategy.rules.type === "UNDERLYING_CROSS_ABOVE" ? "crosses above" : "crosses below"} ${formatCurrency(strategy.rules.triggerPrice)}`,
+    strategySpecificSummary,
     `Trade ${formatTradeSide(strategy.trade.side)} ${strategy.trade.symbol}`,
     `SL ${strategy.risk?.stopLossPercent ? `${strategy.risk.stopLossPercent}%` : "None"}`,
     `Target ${strategy.risk?.targetPercent ? `${strategy.risk.targetPercent}%` : "None"}`
@@ -626,6 +630,12 @@ export const StrategyDetails: React.FC = () => {
                       {strategy.lastTriggeredAt ? formatDate(strategy.lastTriggeredAt) : "Never"}
                     </span>
                   </div>
+
+                  {strategyConfig?.RuntimeSignalComponent && (
+                    <div className="border-t border-slate-800/80 pt-2 mt-2">
+                      <strategyConfig.RuntimeSignalComponent runtimeStatus={runtimeStatus} strategy={strategy} />
+                    </div>
+                  )}
                 </div>
               )}
             </div>

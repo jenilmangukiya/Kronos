@@ -2,7 +2,7 @@ export type StrategyStatus = "STOPPED" | "RUNNING";
 export type StrategyMode = "PAPER" | "LIVE";
 export type StrategyInstrumentType = "EQUITY" | "FUTURE" | "OPTION";
 
-export type StrategyType = "PRICE_BREAKOUT";
+export type StrategyType = string;
 
 export type StrategyRuleType =
   | "UNDERLYING_CROSS_ABOVE"
@@ -41,9 +41,9 @@ export interface CreateStrategyInput {
   strategyType?: StrategyType;
   instrumentType: StrategyInstrumentType;
   mode: StrategyMode;
-  rules: StrategyRules;
-  trade: StrategyTrade;
-  risk?: StrategyRisk;
+  rules: unknown;
+  trade: unknown;
+  risk?: unknown;
 }
 
 export interface UpdateStrategyInput {
@@ -53,7 +53,7 @@ export interface UpdateStrategyInput {
   instrumentType?: StrategyInstrumentType;
   mode?: StrategyMode;
   brokerAccountId?: string;
-  rules?: StrategyRules;
-  trade?: StrategyTrade;
-  risk?: StrategyRisk;
+  rules?: unknown;
+  trade?: unknown;
+  risk?: unknown;
 }

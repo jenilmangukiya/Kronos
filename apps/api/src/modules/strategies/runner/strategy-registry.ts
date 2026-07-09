@@ -13,7 +13,7 @@ class StrategyRegistry {
   }
 
   private register(handler: StrategyHandler) {
-    this.handlers.set(handler.type, handler);
+    this.handlers.set(handler.strategyType, handler);
   }
 }
 

@@ -6,6 +6,7 @@ import { liveMarketDataService } from "../market-data/live/live-market-data.serv
 import { PaperTradingService } from "../paper-trading/service.js";
 import { liveTickStore } from "../market-data/live/live-tick.store.js";
 import { realtimeService } from "../realtime/realtime.service.js";
+import { strategyRegistry } from "./runner/strategy-registry.js";
 
 export class StrategyService {
   constructor(
@@ -184,15 +185,17 @@ export class StrategyService {
       );
     }
 
-    const rules = strategy.rules as {
-      underlyingToken: string;
-      underlyingExchangeType: number;
-    };
+    const rules = (strategy.rules || {}) as any;
+    const trade = (strategy.trade || {}) as any;
 
-    const trade = strategy.trade as {
-      token: string;
-      exchangeType: number;
-    };
+    const handler = strategyRegistry.get(strategy.strategyType);
+    if (!handler) {
+      throw new AppError(
+        "No handler found for strategy type",
+        400,
+        "STRATEGY_TYPE_NOT_SUPPORTED",
+      );
+    }
 
     await liveMarketDataService.start(
       this.app,
@@ -200,23 +203,8 @@ export class StrategyService {
       strategy.brokerAccountId,
     );
 
-    liveMarketDataService.subscribe(userId, strategy.brokerAccountId, [
-      {
-        exchangeType: rules.underlyingExchangeType as
-          | 1
-          | 2
-          | 3
-          | 4
-          | 5
-          | 7
-          | 13,
-        tokens: [rules.underlyingToken],
-      },
-      {
-        exchangeType: trade.exchangeType as 1 | 2 | 3 | 4 | 5 | 7 | 13,
-        tokens: [trade.token],
-      },
-    ]);
+    const subscriptions = handler.getRequiredSubscriptions(strategy);
+    liveMarketDataService.subscribe(userId, strategy.brokerAccountId, subscriptions as any);
 
     const openPosition = await this.db.paperPosition.findFirst({
       where: {
@@ -260,36 +248,13 @@ export class StrategyService {
     });
 
     if (strategy.brokerAccountId) {
-      const rules = strategy.rules as {
-        underlyingToken: string;
-        underlyingExchangeType: number;
-      };
-
-      const trade = strategy.trade as {
-        token: string;
-        exchangeType: number;
-      };
-
+      const handler = strategyRegistry.get(strategy.strategyType);
       try {
-        liveMarketDataService.unsubscribe(userId, strategy.brokerAccountId, [
-          {
-            exchangeType: rules.underlyingExchangeType as
-              | 1
-              | 2
-              | 3
-              | 4
-              | 5
-              | 7
-              | 13,
-            tokens: [rules.underlyingToken],
-          },
-          {
-            exchangeType: trade.exchangeType as 1 | 2 | 3 | 4 | 5 | 7 | 13,
-            tokens: [trade.token],
-          },
-        ]);
-
-        await this.addLog(strategy.id, "Live market data unsubscribed");
+        if (handler) {
+          const subscriptions = handler.getRequiredSubscriptions(strategy);
+          liveMarketDataService.unsubscribe(userId, strategy.brokerAccountId, subscriptions as any);
+          await this.addLog(strategy.id, "Live market data unsubscribed");
+        }
       } catch {
         await this.addLog(strategy.id, "Live unsubscribe skipped");
       }
@@ -346,28 +311,13 @@ export class StrategyService {
     const strategy = await this.getById(userId, strategyId);
 
     if (strategy.brokerAccountId) {
-      const rules = strategy.rules as {
-        underlyingToken: string;
-        underlyingExchangeType: number;
-      };
-
-      const trade = strategy.trade as {
-        token: string;
-        exchangeType: number;
-      };
-
+      const handler = strategyRegistry.get(strategy.strategyType);
       try {
-        liveMarketDataService.unsubscribe(userId, strategy.brokerAccountId, [
-          {
-            exchangeType: rules.underlyingExchangeType as any,
-            tokens: [rules.underlyingToken],
-          },
-          {
-            exchangeType: trade.exchangeType as any,
-            tokens: [trade.token],
-          },
-        ]);
-        await this.addLog(strategy.id, "Live market data unsubscribed");
+        if (handler) {
+          const subscriptions = handler.getRequiredSubscriptions(strategy);
+          liveMarketDataService.unsubscribe(userId, strategy.brokerAccountId, subscriptions as any);
+          await this.addLog(strategy.id, "Live market data unsubscribed");
+        }
       } catch {
         // Ignore unsubscribe error during reset
       }
@@ -508,36 +458,6 @@ export class StrategyService {
     return risk.reEntryMode || "NO_REENTRY";
   }
 
-  private getConditionPreview(strategy: any, tick: any) {
-    if (strategy.strategyType !== "PRICE_BREAKOUT") {
-      return null;
-    }
-    const rules = (strategy.rules || {}) as any;
-    const triggerPrice = rules.triggerPrice;
-    const type = rules.type;
-
-    if (!tick) {
-      return {
-        type,
-        triggerPrice,
-        matched: false,
-      };
-    }
-
-    let matched = false;
-    if (type === "UNDERLYING_CROSS_ABOVE") {
-      matched = tick.ltp >= triggerPrice;
-    } else if (type === "UNDERLYING_CROSS_BELOW") {
-      matched = tick.ltp <= triggerPrice;
-    }
-
-    return {
-      type,
-      triggerPrice,
-      matched,
-    };
-  }
-
   async getRuntimeStatus(userId: string, strategyId: string) {
     const strategy = await this.getById(userId, strategyId);
 
@@ -562,6 +482,15 @@ export class StrategyService {
     const underlyingToken = rules.underlyingToken;
     const brokerAccountId = strategy.brokerAccountId;
 
+    const handler = strategyRegistry.get(strategy.strategyType);
+    let handlerStatus: Record<string, any> = {};
+    if (handler && handler.getRuntimeStatus) {
+      handlerStatus = await handler.getRuntimeStatus({
+        app: this.app,
+        strategy,
+      });
+    }
+
     const tick = (brokerAccountId && underlyingToken)
       ? liveTickStore.getTick(brokerAccountId, underlyingToken)
       : null;
@@ -570,8 +499,6 @@ export class StrategyService {
     const tradeTick = (brokerAccountId && tradeToken)
       ? liveTickStore.getTick(brokerAccountId, tradeToken)
       : null;
-
-    const condition = this.getConditionPreview(strategy, tick);
 
     let canEnter = false;
     let reason = "";
@@ -591,10 +518,10 @@ export class StrategyService {
     } else if (tradesToday >= maxTradesPerDay) {
       canEnter = false;
       reason = "Max trades reached for today";
-    } else if (strategy.strategyType !== "PRICE_BREAKOUT") {
+    } else if (!handler) {
       canEnter = false;
-      reason = "Unsupported runtime condition preview";
-    } else if (condition && condition.matched) {
+      reason = "No handler found for strategy type";
+    } else if (handlerStatus.condition?.matched) {
       canEnter = true;
       reason = "Entry condition matched";
     } else {
@@ -617,7 +544,8 @@ export class StrategyService {
       reason,
       liveTick: tick,
       tradeTick,
-      condition,
+      condition: handlerStatus.condition || null,
+      strategySignal: handlerStatus.strategySignal || null,
       state: strategy.state || {},
     };
   }
@@ -630,111 +558,24 @@ export class StrategyService {
     const trade = input.trade !== undefined ? input.trade : (existing ? existing.trade : undefined);
     const risk = input.risk !== undefined ? input.risk : (existing ? existing.risk : undefined);
 
-    // 1. INVALID_STRATEGY_CONFIG
-    if (name === undefined || name === null || typeof name !== "string" || name.trim() === "") {
-      throw new AppError("Strategy name is required", 400, "INVALID_STRATEGY_CONFIG");
-    }
-
-    if (strategyType !== "PRICE_BREAKOUT") {
+    const handler = strategyRegistry.get(strategyType);
+    if (!handler) {
       throw new AppError("Invalid strategy type", 400, "INVALID_STRATEGY_CONFIG");
     }
 
-    if (instrumentType !== "FUTURE" && instrumentType !== "OPTION") {
-      throw new AppError("Instrument type must be FUTURE or OPTION", 400, "INVALID_STRATEGY_CONFIG");
-    }
-
-    if (!rules) {
-      throw new AppError("Strategy rules are required", 400, "INVALID_STRATEGY_CONFIG");
-    }
-
-    if (rules.triggerPrice === undefined || rules.triggerPrice === null || typeof rules.triggerPrice !== "number" || rules.triggerPrice <= 0) {
-      throw new AppError("Trigger price must be greater than 0", 400, "INVALID_STRATEGY_CONFIG");
-    }
-
-    if (!rules.underlyingToken || typeof rules.underlyingToken !== "string" || rules.underlyingToken.trim() === "") {
-      throw new AppError("Underlying token is required", 400, "INVALID_STRATEGY_CONFIG");
-    }
-
-    if (rules.underlyingExchangeType === undefined || rules.underlyingExchangeType === null || typeof rules.underlyingExchangeType !== "number") {
-      throw new AppError("Underlying exchange type is required", 400, "INVALID_STRATEGY_CONFIG");
-    }
-
-    // 2. INVALID_TRADE_CONFIG
-    if (!trade) {
-      throw new AppError("Trade configuration is required", 400, "INVALID_TRADE_CONFIG");
-    }
-
-    if (!trade.token || typeof trade.token !== "string" || trade.token.trim() === "") {
-      throw new AppError("Trade token is required", 400, "INVALID_TRADE_CONFIG");
-    }
-
-    if (!trade.symbol || typeof trade.symbol !== "string" || trade.symbol.trim() === "") {
-      throw new AppError("Trade symbol is required", 400, "INVALID_TRADE_CONFIG");
-    }
-
-    if (trade.exchange !== "NFO") {
-      throw new AppError("Trade exchange must be NFO for FUTURE/OPTION", 400, "INVALID_TRADE_CONFIG");
-    }
-
-    if (trade.exchangeType !== 2) {
-      throw new AppError("Trade exchangeType must be 2 for FUTURE/OPTION", 400, "INVALID_TRADE_CONFIG");
-    }
-
-    if (trade.quantity === undefined || trade.quantity === null || typeof trade.quantity !== "number" || trade.quantity <= 0) {
-      throw new AppError("Trade quantity must be greater than 0", 400, "INVALID_TRADE_CONFIG");
-    }
-
-    // 3. INVALID_RISK_CONFIG
-    if (risk) {
-      if (risk.maxTradesPerDay !== undefined && risk.maxTradesPerDay !== null) {
-        if (typeof risk.maxTradesPerDay !== "number" || risk.maxTradesPerDay < 1) {
-          throw new AppError("Max trades per day must be >= 1", 400, "INVALID_RISK_CONFIG");
-        }
+    try {
+      handler.validateConfig({
+        rules,
+        trade,
+        risk,
+        instrumentType: instrumentType || "",
+        name: name || "",
+      });
+    } catch (err: any) {
+      if (err instanceof AppError) {
+        throw err;
       }
-
-      if (risk.stopLossPercent !== undefined && risk.stopLossPercent !== null) {
-        if (typeof risk.stopLossPercent !== "number" || risk.stopLossPercent <= 0) {
-          throw new AppError("Stop loss percent must be greater than 0 if provided", 400, "INVALID_RISK_CONFIG");
-        }
-      }
-
-      if (risk.targetPercent !== undefined && risk.targetPercent !== null) {
-        if (typeof risk.targetPercent !== "number" || risk.targetPercent <= 0) {
-          throw new AppError("Target percent must be greater than 0 if provided", 400, "INVALID_RISK_CONFIG");
-        }
-      }
-
-      if (risk.reEntryMode !== undefined && risk.reEntryMode !== null) {
-        const validModes = ["NO_REENTRY", "AFTER_EXIT", "AFTER_NEW_SIGNAL"];
-        if (!validModes.includes(risk.reEntryMode)) {
-          throw new AppError("Invalid re-entry mode", 400, "INVALID_RISK_CONFIG");
-        }
-      }
-    }
-
-    // 4. Instrument-specific validation
-    if (instrumentType === "FUTURE") {
-      if (trade.instrumentType !== "FUTURE") {
-        throw new AppError("Trade instrumentType must be FUTURE for FUTURE strategy", 400, "INVALID_FUTURE_CONTRACT");
-      }
-      if (!trade.symbol.includes("FUT")) {
-        throw new AppError("Trade symbol must include FUT for FUTURE strategy", 400, "INVALID_FUTURE_CONTRACT");
-      }
-      if (!trade.token || trade.token.trim() === "") {
-        throw new AppError("Trade token is required for FUTURE strategy", 400, "INVALID_FUTURE_CONTRACT");
-      }
-    }
-
-    if (instrumentType === "OPTION") {
-      if (trade.instrumentType !== "OPTION") {
-        throw new AppError("Trade instrumentType must be OPTION for OPTION strategy", 400, "INVALID_OPTION_CONTRACT");
-      }
-      if (!trade.symbol.includes("CE") && !trade.symbol.includes("PE")) {
-        throw new AppError("Trade symbol must include CE or PE for OPTION strategy", 400, "INVALID_OPTION_CONTRACT");
-      }
-      if (!trade.token || trade.token.trim() === "") {
-        throw new AppError("Trade token is required for OPTION strategy", 400, "INVALID_OPTION_CONTRACT");
-      }
+      throw new AppError(err.message || "Invalid strategy configuration", 400, "INVALID_STRATEGY_CONFIG");
     }
   }
 }

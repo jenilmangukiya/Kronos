@@ -3,7 +3,6 @@ import { Link, useParams } from "react-router-dom";
 import { AlertCircle, ArrowLeft, ShieldAlert, Info } from "lucide-react";
 import { useStrategyCreate } from "./useStrategyCreate";
 import { StrategyBasicForm } from "./components/StrategyBasicForm";
-import { StrategyRuleForm } from "./components/StrategyRuleForm";
 import { StrategyTradeForm } from "./components/StrategyTradeForm";
 import { StrategyRiskForm } from "./components/StrategyRiskForm";
 import { StrategyJsonPreview } from "../StrategyDetails/components/StrategyJsonPreview";
@@ -11,6 +10,7 @@ import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
 import { Spinner } from "../../../components/ui/Spinner";
 import { UNDERLYING_TOKENS } from "./constants";
+import { getStrategyTypeConfig } from "../strategyTypes";
 
 export const StrategyCreate: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -70,6 +70,9 @@ export const StrategyCreate: React.FC = () => {
     ? (form.tradeLots || 0) * lotSize
     : Number(form.tradeQuantity);
 
+  const config = getStrategyTypeConfig("PRICE_BREAKOUT");
+  const rules = config?.buildRulesPayload ? config.buildRulesPayload(form) : {};
+
   const previewStrategy = {
     id: id || "preview",
     userId: "preview",
@@ -79,12 +82,7 @@ export const StrategyCreate: React.FC = () => {
     instrumentType: form.instrumentType,
     mode: form.mode,
     status: "STOPPED",
-    rules: {
-      type: form.ruleType,
-      underlyingToken: underlying?.token || "",
-      underlyingExchangeType: underlying?.exchangeType || 2,
-      triggerPrice: Number(form.triggerPrice),
-    },
+    rules,
     trade: {
       instrumentType: form.instrumentType,
       token: form.tradeToken,
@@ -152,12 +150,14 @@ export const StrategyCreate: React.FC = () => {
       <Card className="border-slate-800 bg-slate-900/40 p-6 space-y-8">
         <StrategyBasicForm form={form} onChange={setFieldValue} />
 
-        <StrategyRuleForm
-          form={form}
-          onChange={setFieldValue}
-          underlyingLtp={underlyingLtp}
-          triggerPriceWarning={triggerPriceWarning}
-        />
+        {config?.FormComponent && (
+          <config.FormComponent
+            form={form}
+            onChange={setFieldValue}
+            underlyingLtp={underlyingLtp}
+            triggerPriceWarning={triggerPriceWarning}
+          />
+        )}
 
         <StrategyTradeForm
           form={form}

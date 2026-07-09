@@ -27,6 +27,7 @@ export interface StrategyContext {
     strategyType: string;
     rules: unknown;
     trade: unknown;
+    risk: unknown;
     state?: unknown;
   };
 }
@@ -38,6 +39,16 @@ export interface StrategyDecision {
 }
 
 export interface StrategyHandler {
-  type: string;
-  evaluate(context: StrategyContext): Promise<StrategyDecision>;
+  strategyType: string;
+  validateConfig(config: {
+    rules: unknown;
+    trade: unknown;
+    risk: unknown;
+    instrumentType: string;
+    name: string;
+  }): void | Promise<void>;
+  getRequiredSubscriptions(strategy: any): { exchangeType: number; tokens: string[] }[];
+  evaluateEntry(context: StrategyContext): Promise<StrategyDecision>;
+  evaluateExit?(context: StrategyContext & { position: any }): Promise<StrategyDecision>;
+  getRuntimeStatus?(context: StrategyContext): Promise<Record<string, any>> | Record<string, any>;
 }

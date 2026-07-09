@@ -4,6 +4,7 @@ import { Card } from "../../../../components/ui/Card";
 import { Badge } from "../../../../components/ui/Badge";
 import { Calendar, Cpu, TrendingUp, ShieldAlert, Award, Sliders, Shield } from "lucide-react";
 import { formatReEntryMode } from "../helpers";
+import { getStrategyTypeConfig } from "../../strategyTypes";
 
 interface StrategyInfoCardProps {
   strategy: Strategy;
@@ -87,35 +88,13 @@ export const StrategyInfoCard: React.FC<StrategyInfoCardProps> = ({ strategy }) 
 
       {/* Rules & Trade Configuration Card */}
       <div className="space-y-6">
-        {/* Rule Card */}
-        <Card className="border-slate-800 bg-slate-900/40 p-4 space-y-3">
-          <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-            <Sliders className="h-4.5 w-4.5 text-blue-400" />
-            Rule Engine Details
-          </h4>
-          <div className="grid grid-cols-2 gap-3 text-xs border-t border-slate-800/60 pt-3">
-            <div>
-              <span className="text-slate-400 block font-medium">Trigger Condition</span>
-              <span className="text-slate-200 font-semibold mt-0.5 block">
-                Spot {strategy.rules.type === "UNDERLYING_CROSS_ABOVE" ? "Crosses Above" : "Crosses Below"}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 block font-medium">Trigger Price</span>
-              <span className="text-slate-100 font-bold mt-0.5 block">
-                ₹{strategy.rules.triggerPrice.toLocaleString("en-IN")}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 block font-medium">Underlying Token</span>
-              <span className="text-slate-300 mt-0.5 block">{strategy.rules.underlyingToken}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block font-medium">Exchange ID</span>
-              <span className="text-slate-300 mt-0.5 block">{strategy.rules.underlyingExchangeType}</span>
-            </div>
-          </div>
-        </Card>
+        {(() => {
+          const config = getStrategyTypeConfig(strategy.strategyType);
+          if (config?.PreviewComponent) {
+            return <config.PreviewComponent strategy={strategy} />;
+          }
+          return null;
+        })()}
 
         {/* Trade Asset details */}
         <Card className="border-slate-800 bg-slate-900/40 p-4 space-y-3">

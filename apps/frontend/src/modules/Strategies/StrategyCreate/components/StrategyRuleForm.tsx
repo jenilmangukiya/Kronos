@@ -5,7 +5,7 @@ import { Input } from "../../../../components/ui/Input";
 import { StrategyFormValues } from "../types";
 import { RULE_TYPE_OPTIONS, UNDERLYING_TOKENS } from "../constants";
 
-interface StrategyRuleFormProps {
+export interface StrategyRuleFormProps {
   form: StrategyFormValues;
   onChange: (field: keyof StrategyFormValues, value: any) => void;
   underlyingLtp?: number;

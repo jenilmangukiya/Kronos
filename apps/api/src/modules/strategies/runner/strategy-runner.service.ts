@@ -207,7 +207,7 @@ export class StrategyRunnerService {
         return;
       }
 
-      const decision = await handler.evaluate({
+      const decision = await handler.evaluateEntry({
         app: this.app,
         strategy,
       });

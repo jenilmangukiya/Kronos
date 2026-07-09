@@ -6,6 +6,7 @@ import { useGetFutures, useOptionExpiries, useOptionChainQuery, useLiveLatestTic
 import { UNDERLYING_TOKENS } from "./constants";
 import { StrategyFormValues } from "./types";
 import { CreateStrategyRequest } from "../../../services/strategies/StrategyService";
+import { getStrategyTypeConfig } from "../strategyTypes";
 
 export const useStrategyCreate = () => {
   const navigate = useNavigate();
@@ -96,7 +97,10 @@ export const useStrategyCreate = () => {
 
   const isSubmitDisabled = (() => {
     if (!form.name || !form.name.trim()) return true;
-    if (!form.triggerPrice || Number(form.triggerPrice) <= 0) return true;
+
+    const config = getStrategyTypeConfig("PRICE_BREAKOUT");
+    if (config?.isFormValid && !config.isFormValid(form)) return true;
+
     if (form.maxTradesPerDay === undefined || form.maxTradesPerDay === null || (form.maxTradesPerDay as any) === "" || Number(form.maxTradesPerDay) < 1) return true;
     if (!form.reEntryMode) return true;
 
@@ -283,18 +287,16 @@ export const useStrategyCreate = () => {
     const resolvedLotSize = form.instrumentType === "FUTURE" && futureContract ? futureContract.lotSize : lotSize;
     const quantity = (form.tradeLots || 0) * resolvedLotSize;
 
+    const config = getStrategyTypeConfig("PRICE_BREAKOUT");
+    const rules = config?.buildRulesPayload ? config.buildRulesPayload(form) : {};
+
     const body: CreateStrategyRequest = {
       brokerAccountId,
       name: form.name,
       symbol: form.symbol,
       instrumentType: form.instrumentType,
       mode: "PAPER",
-      rules: {
-        type: form.ruleType,
-        underlyingToken: underlying.token,
-        underlyingExchangeType: underlying.exchangeType,
-        triggerPrice: Number(form.triggerPrice),
-      },
+      rules,
       trade: {
         instrumentType: form.instrumentType,
         token: form.tradeToken,

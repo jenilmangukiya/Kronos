@@ -1,8 +1,9 @@
 import { getAccessToken } from "../../utils/storage";
 import { ClientRealtimeMessage, ServerRealtimeMessage } from "./realtime.types";
+import { config } from "../../config";
 
 const getWsUrl = () => {
-  const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+  const apiBase = config.apiBaseUrl;
   return `${apiBase.replace(/^http/, "ws")}/realtime/ws`;
 };
 
@@ -33,7 +34,7 @@ class RealtimeClient {
     const wsUrl = `${getWsUrl()}?token=${encodeURIComponent(token)}`;
     console.log("[RealtimeClient] Connecting to:", wsUrl);
 
-    if (import.meta.env.DEV) {
+    if (config.isDev) {
       console.log("WS connecting");
     }
 
@@ -47,7 +48,7 @@ class RealtimeClient {
         this.reconnectAttempts = 0;
         
         console.log("[RealtimeClient] Realtime WebSocket connection established");
-        if (import.meta.env.DEV) {
+        if (config.isDev) {
           console.log("WS connected");
         }
         
@@ -73,7 +74,7 @@ class RealtimeClient {
         this.isConnecting = false;
         this.socket = null;
         console.log("[RealtimeClient] Realtime WebSocket connection closed:", event.code, event.reason);
-        if (import.meta.env.DEV) {
+        if (config.isDev) {
           console.log("WS disconnected");
         }
 
@@ -127,7 +128,7 @@ class RealtimeClient {
   }
 
   sendSubscribe(strategyId: string) {
-    if (import.meta.env.DEV) {
+    if (config.isDev) {
       console.log("WS subscribed strategy");
     }
     this.send({ type: "subscribe_strategy", strategyId });

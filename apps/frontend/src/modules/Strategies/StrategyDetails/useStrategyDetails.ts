@@ -15,6 +15,7 @@ import { useGetPaperPositions, useGetPaperOrders } from "../../../services/paper
 import { useStrategyRealtime } from "../../../services/realtime/useStrategyRealtime";
 import { useLiveLatestTick } from "../../../services/market-data/MarketDataQueries";
 import { useStrategyCandles } from "../../../services/market-data/useCandles";
+import { config } from "../../../config";
 
 export const useStrategyDetails = () => {
   const { id = "" } = useParams<{ id: string }>();
@@ -36,18 +37,44 @@ export const useStrategyDetails = () => {
     enabled: Boolean(id) && queriesEnabled,
   });
 
+  const realtime = useStrategyRealtime(id, {
+    onDataChanged: (event) => {
+      if (config.isDev) {
+        console.log("[Realtime] strategy_data_changed", event);
+        console.log("[Realtime] invalidating scopes", event.scopes);
+      }
+
+      event.scopes.forEach((scope) => {
+        if (scope === "logs") {
+          queryClient.invalidateQueries({ queryKey: ["strategies", id, "logs"] });
+        } else if (scope === "orders") {
+          queryClient.invalidateQueries({ queryKey: ["paper-trading", "orders"] });
+        } else if (scope === "positions") {
+          queryClient.invalidateQueries({ queryKey: ["paper-trading", "positions"] });
+        } else if (scope === "strategy") {
+          queryClient.invalidateQueries({ queryKey: ["strategies", id] });
+          queryClient.invalidateQueries({ queryKey: ["strategies"] });
+        } else if (scope === "runtime") {
+          if (!realtime.isConnected) {
+            queryClient.invalidateQueries({ queryKey: ["strategies", id, "runtime-status"] });
+          }
+        }
+      });
+    },
+  });
+  const realtimeConnected = realtime.isConnected;
+
+  const wsAdaptivePollInterval = realtimeConnected ? false : pollInterval;
+
   // Poll logs every 2 seconds
   const {
     data: logs = [],
     isLoading: isLogsLoading,
     error: logsError,
   } = useGetStrategyLogs(id, {
-    refetchInterval: pollInterval,
+    refetchInterval: wsAdaptivePollInterval,
     enabled: Boolean(id) && queriesEnabled,
   });
-
-  const realtime = useStrategyRealtime(id);
-  const realtimeConnected = realtime.isConnected;
 
   // Poll runtime status every 1 second (REST fallback - only active when WS is disconnected)
   const {
@@ -67,7 +94,7 @@ export const useStrategyDetails = () => {
     isLoading: isPositionsLoading,
     error: positionsError,
   } = useGetPaperPositions({
-    refetchInterval: pollInterval,
+    refetchInterval: wsAdaptivePollInterval,
     enabled: queriesEnabled,
   });
 
@@ -77,7 +104,7 @@ export const useStrategyDetails = () => {
     isLoading: isOrdersLoading,
     error: ordersError,
   } = useGetPaperOrders({
-    refetchInterval: pollInterval,
+    refetchInterval: wsAdaptivePollInterval,
     enabled: queriesEnabled,
   });
 

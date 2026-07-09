@@ -3,12 +3,16 @@ import type { RawData } from "ws";
 import { JwtService } from "../../services/jwt.service.js";
 import { ClientRealtimeMessage, ServerRealtimeMessage } from "./realtime.types.js";
 import { realtimeService } from "./realtime.service.js";
+import { StrategyService } from "../strategies/service.js";
 
 export async function realtimeRoutes(app: FastifyInstance) {
   const jwtService = new JwtService();
 
   // Register broadcaster
-  realtimeService.startRuntimeStatusBroadcast(app);
+  const strategyService = new StrategyService(app, app.db);
+  realtimeService.startRuntimeStatusBroadcast(app, (userId, strategyId) =>
+    strategyService.getRuntimeStatus(userId, strategyId)
+  );
 
   // Stop broadcaster on app close
   app.addHook("onClose", async () => {

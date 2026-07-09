@@ -2,7 +2,6 @@ import { WebSocket } from "ws";
 import crypto from "crypto";
 import type { FastifyInstance } from "fastify";
 import { RealtimeClient, ServerRealtimeMessage } from "./realtime.types.js";
-import { StrategyService } from "../strategies/service.js";
 
 export class RealtimeService {
   private readonly clients = new Map<string, RealtimeClient>();
@@ -67,14 +66,41 @@ export class RealtimeService {
     );
   }
 
-  startRuntimeStatusBroadcast(app: FastifyInstance): void {
+  publishStrategyDataChanged(
+    strategyId: string,
+    scopes: Array<"logs" | "orders" | "positions" | "strategy" | "runtime">
+  ): void {
+    try {
+      const message: ServerRealtimeMessage = {
+        type: "strategy_data_changed",
+        strategyId,
+        scopes,
+        ts: Date.now(),
+      };
+
+      for (const [clientId, client] of Array.from(this.clients.entries())) {
+        if (client.subscribedStrategyIds.has(strategyId)) {
+          try {
+            this.send(client, message);
+          } catch (error) {
+            this.removeClient(clientId);
+          }
+        }
+      }
+    } catch (error) {
+      // publishStrategyDataChanged should never throw
+    }
+  }
+
+  startRuntimeStatusBroadcast(
+    app: FastifyInstance,
+    getRuntimeStatus: (userId: string, strategyId: string) => Promise<unknown>
+  ): void {
     if (this.runtimeInterval) {
       return;
     }
 
     app.log.info("[Realtime] Runtime broadcaster started");
-
-    const strategyService = new StrategyService(app, app.db);
 
     this.runtimeInterval = setInterval(async () => {
       // If no clients or no subscribed strategies, skip work
@@ -102,7 +128,7 @@ export class RealtimeService {
         // Loop over each client.subscribedStrategyIds
         for (const strategyId of Array.from(client.subscribedStrategyIds)) {
           try {
-            const runtimeStatus = await strategyService.getRuntimeStatus(
+            const runtimeStatus = await getRuntimeStatus(
               client.userId,
               strategyId
             );

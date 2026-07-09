@@ -11,7 +11,13 @@ export type ServerRealtimeMessage =
   | { type: "subscribed_strategy"; strategyId: string }
   | { type: "unsubscribed_strategy"; strategyId: string }
   | { type: "strategy_runtime_status"; strategyId: string; data: unknown }
-  | { type: "strategy_runtime_status_error"; strategyId: string; message: string };
+  | { type: "strategy_runtime_status_error"; strategyId: string; message: string }
+  | {
+      type: "strategy_data_changed";
+      strategyId: string;
+      scopes: Array<"logs" | "orders" | "positions" | "strategy" | "runtime">;
+      ts: number;
+    };
 
 export interface RealtimeClient {
   id: string;

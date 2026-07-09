@@ -4,6 +4,7 @@ import { PaperTradingService } from "../../paper-trading/service.js";
 import { strategyRegistry } from "./strategy-registry.js";
 import type { StrategyTrade } from "./handlers/types.js";
 import { liveTickStore } from "../../market-data/live/live-tick.store.js";
+import { realtimeService } from "../../realtime/realtime.service.js";
 
 export class StrategyRunnerService {
   private interval: NodeJS.Timeout | null = null;
@@ -254,6 +255,14 @@ export class StrategyRunnerService {
       await this.addLog(strategy.id, "Entry paper order executed", {
         orderResult,
       });
+
+      realtimeService.publishStrategyDataChanged(strategy.id, [
+        "logs",
+        "orders",
+        "positions",
+        "strategy",
+        "runtime",
+      ]);
     } finally {
       this.executingStrategies.delete(strategy.id);
     }
@@ -328,6 +337,14 @@ export class StrategyRunnerService {
       exitResult,
     });
 
+    realtimeService.publishStrategyDataChanged(strategy.id, [
+      "logs",
+      "orders",
+      "positions",
+      "strategy",
+      "runtime",
+    ]);
+
     await this.app.db.strategy.update({
       where: {
         id: strategy.id,
@@ -338,6 +355,12 @@ export class StrategyRunnerService {
     });
 
     await this.addLog(strategy.id, "Strategy stopped after exit");
+
+    realtimeService.publishStrategyDataChanged(strategy.id, [
+      "logs",
+      "strategy",
+      "runtime",
+    ]);
   }
 
   private getExitReason(input: {
@@ -377,6 +400,8 @@ export class StrategyRunnerService {
         meta: meta ?? {},
       },
     });
+
+    realtimeService.publishStrategyDataChanged(strategyId, ["logs", "runtime"]);
   }
 
   private getTodayRange() {

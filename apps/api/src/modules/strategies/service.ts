@@ -5,6 +5,7 @@ import type { CreateStrategyInput, UpdateStrategyInput } from "./types.js";
 import { liveMarketDataService } from "../market-data/live/live-market-data.service.js";
 import { PaperTradingService } from "../paper-trading/service.js";
 import { liveTickStore } from "../market-data/live/live-tick.store.js";
+import { realtimeService } from "../realtime/realtime.service.js";
 
 export class StrategyService {
   constructor(
@@ -160,6 +161,12 @@ export class StrategyService {
       tradeToken: trade.token,
     });
 
+    realtimeService.publishStrategyDataChanged(strategy.id, [
+      "logs",
+      "strategy",
+      "runtime",
+    ]);
+
     return updated;
   }
 
@@ -211,6 +218,12 @@ export class StrategyService {
 
     await this.addLog(strategy.id, "Strategy stopped");
 
+    realtimeService.publishStrategyDataChanged(strategy.id, [
+      "logs",
+      "strategy",
+      "runtime",
+    ]);
+
     return updated;
   }
 
@@ -235,6 +248,14 @@ export class StrategyService {
     }
 
     const updated = await this.stop(userId, strategyId);
+
+    realtimeService.publishStrategyDataChanged(strategy.id, [
+      "logs",
+      "orders",
+      "positions",
+      "strategy",
+      "runtime",
+    ]);
 
     return {
       strategy: updated,
@@ -284,6 +305,12 @@ export class StrategyService {
 
     await this.addLog(strategy.id, "Strategy reset");
 
+    realtimeService.publishStrategyDataChanged(strategy.id, [
+      "logs",
+      "strategy",
+      "runtime",
+    ]);
+
     return updated;
   }
 
@@ -309,6 +336,12 @@ export class StrategyService {
     });
 
     await this.addLog(duplicated.id, "Strategy duplicated");
+
+    realtimeService.publishStrategyDataChanged(duplicated.id, [
+      "logs",
+      "strategy",
+      "runtime",
+    ]);
 
     return duplicated;
   }

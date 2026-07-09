@@ -1,11 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { realtimeClient } from "./realtimeClient";
-import { ServerRealtimeMessage } from "./realtime.types";
+import { ServerRealtimeMessage, StrategyDataChangedMessage } from "./realtime.types";
+import { config } from "../../config";
 
-export function useStrategyRealtime(strategyId: string | undefined) {
+export interface UseStrategyRealtimeOptions {
+  onDataChanged?: (event: StrategyDataChangedMessage) => void;
+}
+
+export function useStrategyRealtime(
+  strategyId: string | undefined,
+  options?: UseStrategyRealtimeOptions
+) {
   const [runtimeStatus, setRuntimeStatus] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(realtimeClient.isConnected());
   const [error, setError] = useState<string | null>(null);
+
+  const onDataChangedRef = useRef(options?.onDataChanged);
+  useEffect(() => {
+    onDataChangedRef.current = options?.onDataChanged;
+  }, [options?.onDataChanged]);
 
   useEffect(() => {
     if (!strategyId) return;
@@ -20,6 +33,13 @@ export function useStrategyRealtime(strategyId: string | undefined) {
         setError(null);
       } else if (message.type === "strategy_runtime_status_error" && message.strategyId === strategyId) {
         setError(message.message);
+      } else if (message.type === "strategy_data_changed" && message.strategyId === strategyId) {
+        if (config.isDev) {
+          console.log("[Realtime] strategy_data_changed", message);
+        }
+        if (onDataChangedRef.current) {
+          onDataChangedRef.current(message);
+        }
       } else if (message.type === "error") {
         setError(message.message);
       }

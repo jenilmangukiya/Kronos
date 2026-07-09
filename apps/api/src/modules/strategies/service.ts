@@ -69,21 +69,94 @@ export class StrategyService {
   }
 
   async update(userId: string, strategyId: string, input: UpdateStrategyInput) {
-    await this.getById(userId, strategyId);
-
-    const strategy = await this.db.strategy.update({
+    const existing = await this.db.strategy.findUnique({
       where: { id: strategyId },
-      data: {
-        name: input.name,
-        rules: input.rules as any,
-        trade: input.trade as any,
-        risk: input.risk as any,
-      },
     });
 
-    await this.addLog(strategy.id, "Strategy updated");
+    if (existing) {
+      if (existing.userId !== userId) {
+        throw new AppError("Strategy not found", 404, "STRATEGY_NOT_FOUND");
+      }
 
-    return strategy;
+      if (existing.status === "RUNNING") {
+        throw new AppError(
+          "Stop strategy before editing",
+          400,
+          "STRATEGY_EDIT_RUNNING_NOT_ALLOWED",
+        );
+      }
+
+      const openPosition = await this.db.paperPosition.findFirst({
+        where: {
+          userId,
+          strategyId,
+          status: "OPEN",
+        },
+      });
+
+      if (openPosition) {
+        throw new AppError(
+          "Exit open position before editing strategy",
+          400,
+          "STRATEGY_EDIT_OPEN_POSITION_NOT_ALLOWED",
+        );
+      }
+
+      const strategy = await this.db.strategy.update({
+        where: { id: strategyId },
+        data: {
+          name: input.name,
+          symbol: input.symbol,
+          strategyType: input.strategyType,
+          instrumentType: input.instrumentType,
+          rules: input.rules as any,
+          trade: input.trade as any,
+          risk: input.risk as any,
+          lastTriggeredAt: null,
+          state: {},
+        },
+      });
+
+      await this.addLog(strategy.id, "Strategy updated");
+
+      realtimeService.publishStrategyDataChanged(strategy.id, [
+        "logs",
+        "strategy",
+        "runtime",
+      ]);
+
+      return strategy;
+    } else {
+      const strategy = await this.db.strategy.create({
+        data: {
+          id: strategyId,
+          userId,
+          brokerAccountId: input.brokerAccountId,
+          name: input.name ?? "Unnamed Strategy",
+          symbol: input.symbol ?? "",
+          strategyType: input.strategyType ?? "PRICE_BREAKOUT",
+          instrumentType: input.instrumentType ?? "EQUITY",
+          mode: input.mode ?? "PAPER",
+          status: "STOPPED",
+          rules: (input.rules ?? {}) as any,
+          trade: (input.trade ?? {}) as any,
+          risk: (input.risk ?? {}) as any,
+          state: {},
+        },
+      });
+
+      await this.addLog(strategy.id, "Strategy created", {
+        strategyId: strategy.id,
+      });
+
+      realtimeService.publishStrategyDataChanged(strategy.id, [
+        "logs",
+        "strategy",
+        "runtime",
+      ]);
+
+      return strategy;
+    }
   }
 
   async start(userId: string, strategyId: string) {

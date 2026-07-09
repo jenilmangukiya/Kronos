@@ -1,16 +1,19 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { AlertCircle, ArrowLeft, ShieldAlert, Info } from "lucide-react";
 import { useStrategyCreate } from "./useStrategyCreate";
 import { StrategyBasicForm } from "./components/StrategyBasicForm";
 import { StrategyRuleForm } from "./components/StrategyRuleForm";
 import { StrategyTradeForm } from "./components/StrategyTradeForm";
 import { StrategyRiskForm } from "./components/StrategyRiskForm";
+import { StrategyJsonPreview } from "../StrategyDetails/components/StrategyJsonPreview";
 import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
 import { Spinner } from "../../../components/ui/Spinner";
+import { UNDERLYING_TOKENS } from "./constants";
 
 export const StrategyCreate: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
   const {
     form,
     setFieldValue,
@@ -25,6 +28,7 @@ export const StrategyCreate: React.FC = () => {
     handleCreate,
     isCreating,
     validationError,
+    isEditMode,
   } = useStrategyCreate();
 
   if (isAccountsLoading) {
@@ -57,17 +61,64 @@ export const StrategyCreate: React.FC = () => {
     );
   }
 
+  const underlying = UNDERLYING_TOKENS[form.symbol];
+  const lotSize = form.symbol === "BANKNIFTY" ? 15 : form.symbol === "NIFTY" ? 65 : 1;
+  const quantity = form.instrumentType === "OPTION"
+    ? (form.tradeLots || 0) * lotSize
+    : Number(form.tradeQuantity);
+
+  const previewStrategy = {
+    id: id || "preview",
+    userId: "preview",
+    name: form.name || "Preview Strategy",
+    symbol: form.symbol,
+    strategyType: "PRICE_BREAKOUT",
+    instrumentType: form.instrumentType,
+    mode: form.mode,
+    status: "STOPPED",
+    rules: {
+      type: form.ruleType,
+      underlyingToken: underlying?.token || "",
+      underlyingExchangeType: underlying?.exchangeType || 2,
+      triggerPrice: Number(form.triggerPrice),
+    },
+    trade: {
+      instrumentType: form.instrumentType,
+      token: form.tradeToken,
+      symbol: form.tradeSymbol,
+      exchangeType: 2,
+      exchange: "NFO",
+      side: form.tradeSide,
+      quantity: quantity,
+    },
+    risk: {
+      maxTradesPerDay: Number(form.maxTradesPerDay),
+      stopLossPercent: form.stopLossPercent ? Number(form.stopLossPercent) : undefined,
+      targetPercent: form.targetPercent ? Number(form.targetPercent) : undefined,
+      reEntryMode: form.reEntryMode,
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Page Header */}
       <div className="flex items-center gap-4">
-        <Link to="/dashboard/strategies" className="text-slate-400 hover:text-slate-200">
+        <Link
+          to={isEditMode ? `/dashboard/strategies/${id}` : "/dashboard/strategies"}
+          className="text-slate-400 hover:text-slate-200"
+        >
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white">Create Strategy</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-white">
+            {isEditMode ? "Edit Strategy" : "Create Strategy"}
+          </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Build systematic rules for automated paper-trading executions.
+            {isEditMode
+              ? "Update systematic rules for automated paper-trading executions."
+              : "Build systematic rules for automated paper-trading executions."}
           </p>
         </div>
       </div>
@@ -115,16 +166,19 @@ export const StrategyCreate: React.FC = () => {
 
         {/* Form Controls */}
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800/80">
-          <Link to="/dashboard/strategies">
+          <Link to={isEditMode ? `/dashboard/strategies/${id}` : "/dashboard/strategies"}>
             <Button variant="outline" disabled={isCreating}>
               Cancel
             </Button>
           </Link>
           <Button variant="primary" loading={isCreating} onClick={handleCreate}>
-            Create Strategy
+            {isEditMode ? "Update Strategy" : "Create Strategy"}
           </Button>
         </div>
       </Card>
+
+      {/* Config Preview */}
+      <StrategyJsonPreview strategy={previewStrategy as any} />
     </div>
   );
 };

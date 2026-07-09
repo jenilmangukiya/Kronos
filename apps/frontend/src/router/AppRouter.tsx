@@ -43,6 +43,7 @@ export const AppRouter: React.FC = () => {
           <Route path="strategies" element={<StrategyList />} />
           <Route path="strategies/create" element={<StrategyCreate />} />
           <Route path="strategies/:id" element={<StrategyDetails />} />
+          <Route path="strategies/:id/edit" element={<StrategyCreate />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

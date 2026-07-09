@@ -5,5 +5,6 @@ export default fp(async (app) => {
   await app.register(cors, {
     origin: true,
     credentials: true,
+    methods: ["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH", "HEAD"],
   });
 });

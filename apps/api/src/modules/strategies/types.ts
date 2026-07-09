@@ -48,6 +48,11 @@ export interface CreateStrategyInput {
 
 export interface UpdateStrategyInput {
   name?: string;
+  symbol?: string;
+  strategyType?: StrategyType;
+  instrumentType?: StrategyInstrumentType;
+  mode?: StrategyMode;
+  brokerAccountId?: string;
   rules?: StrategyRules;
   trade?: StrategyTrade;
   risk?: StrategyRisk;

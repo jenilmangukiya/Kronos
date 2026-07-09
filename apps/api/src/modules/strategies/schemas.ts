@@ -42,9 +42,13 @@ export const createStrategyBodySchema = z.object({
 export const updateStrategyBodySchema = z.object({
   name: z.string().min(1).optional(),
   strategyType: z.enum(["PRICE_BREAKOUT"]).optional(),
+  instrumentType: z.enum(["EQUITY", "FUTURE", "OPTION"]).optional(),
+  symbol: z.string().min(1).optional(),
   rules: strategyRulesSchema.optional(),
   trade: strategyTradeSchema.optional(),
   risk: strategyRiskSchema.optional(),
+  mode: z.enum(["PAPER", "LIVE"]).optional(),
+  brokerAccountId: z.string().optional(),
 });
 
 export const strategyParamsSchema = z.object({

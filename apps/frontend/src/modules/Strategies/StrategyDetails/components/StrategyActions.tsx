@@ -1,5 +1,5 @@
 import React from "react";
-import { Play, Square, ArrowLeft, RotateCcw, Copy, StopCircle } from "lucide-react";
+import { Play, Square, ArrowLeft, RotateCcw, Copy, StopCircle, Edit } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "../../../../components/ui/Button";
 import { Strategy } from "../../../../services/strategies/StrategyService";
@@ -53,6 +53,30 @@ export const StrategyActions: React.FC<StrategyActionsProps> = ({
       </Link>
 
       <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        {/* Edit Button */}
+        {isRunning || hasOpenPosition ? (
+          <Button
+            variant="outline"
+            className="flex-1 sm:flex-none gap-1.5 px-3 py-1.5 text-xs border-slate-700 text-slate-500 cursor-not-allowed justify-center"
+            disabled={true}
+            title="Stop strategy and exit open position before editing."
+          >
+            <Edit className="h-3.5 w-3.5" />
+            Edit
+          </Button>
+        ) : (
+          <Link to={`/dashboard/strategies/${strategy.id}/edit`} className="flex-1 sm:flex-none">
+            <Button
+              variant="outline"
+              className="w-full gap-1.5 px-3 py-1.5 text-xs border-slate-700 text-slate-300 hover:bg-slate-800 justify-center"
+              disabled={isAnyLoading}
+            >
+              <Edit className="h-3.5 w-3.5" />
+              Edit
+            </Button>
+          </Link>
+        )}
+
         {/* Reset Button */}
         <Button
           variant="outline"

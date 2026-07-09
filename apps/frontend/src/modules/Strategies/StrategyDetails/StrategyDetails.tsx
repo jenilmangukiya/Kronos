@@ -15,6 +15,7 @@ import { StrategyInfoCard } from "./components/StrategyInfoCard";
 import { StrategyActions } from "./components/StrategyActions";
 import { StrategyLogs } from "./components/StrategyLogs";
 import { StrategyJsonPreview } from "./components/StrategyJsonPreview";
+import { ExitPlanCard } from "./components/ExitPlanCard";
 import { Spinner } from "../../../components/ui/Spinner";
 import { Card } from "../../../components/ui/Card";
 import { Badge } from "../../../components/ui/Badge";
@@ -30,19 +31,39 @@ import {
 
 const getStatusBadgeProps = (reason: string, canEnter: boolean) => {
   if (canEnter) {
-    return { variant: "success" as const, text: "Can Enter" };
+    return {
+      variant: "success" as const,
+      text: "Can Enter",
+      tooltip: "Checks passed: The strategy is active and ready to execute entry orders when conditions match."
+    };
   }
   const r = reason.toLowerCase();
   if (r.includes("stopped")) {
-    return { variant: "neutral" as const, text: "Stopped" };
+    return {
+      variant: "neutral" as const,
+      text: "Stopped",
+      tooltip: "The strategy is currently stopped and will not perform checks or entries."
+    };
   }
   if (r.includes("waiting") || r.includes("condition")) {
-    return { variant: "warning" as const, text: "Waiting" };
+    return {
+      variant: "warning" as const,
+      text: "Waiting",
+      tooltip: "The strategy is actively monitoring condition rules to match."
+    };
   }
   if (r.includes("blocked") || r.includes("max trades") || r.includes("exists") || r.includes("unsupported")) {
-    return { variant: "danger" as const, text: "Blocked" };
+    return {
+      variant: "danger" as const,
+      text: "Blocked",
+      tooltip: "Entry blocked: The strategy cannot enter new positions right now (e.g. because an open position is active or the daily trade limit is reached)."
+    };
   }
-  return { variant: "neutral" as const, text: "Blocked" };
+  return {
+    variant: "neutral" as const,
+    text: "Blocked",
+    tooltip: "Entry blocked. Refer to the 'Reason' field below."
+  };
 };
 
 export const StrategyDetails: React.FC = () => {
@@ -502,7 +523,7 @@ export const StrategyDetails: React.FC = () => {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-6 mt-4">
+              <div className="flex flex-col gap-4 mt-4">
                 <div>
                   <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">Underlying LTP</span>
                   <span className={`text-3xl font-extrabold mt-2 block font-mono ${
@@ -549,7 +570,7 @@ export const StrategyDetails: React.FC = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800/40 text-sm mt-4">
+            <div className="flex flex-col gap-4 pt-4 border-t border-slate-800/40 text-sm mt-4">
               <div>
                 <span className="text-slate-400 block text-xs font-medium uppercase tracking-wider">Rule Type</span>
                 <span className="text-slate-200 font-semibold mt-0.5 block truncate" title={formatRuleType(ruleType)}>
@@ -587,7 +608,11 @@ export const StrategyDetails: React.FC = () => {
                   </span>
                 </div>
                 {runtimeStatus && (
-                  <Badge variant={getStatusBadgeProps(runtimeStatus.reason, runtimeStatus.canEnter).variant}>
+                  <Badge
+                    variant={getStatusBadgeProps(runtimeStatus.reason, runtimeStatus.canEnter).variant}
+                    title={getStatusBadgeProps(runtimeStatus.reason, runtimeStatus.canEnter).tooltip}
+                    className="cursor-help font-semibold"
+                  >
                     {getStatusBadgeProps(runtimeStatus.reason, runtimeStatus.canEnter).text}
                   </Badge>
                 )}
@@ -718,66 +743,76 @@ export const StrategyDetails: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Open Position section */}
-      <Card className="border-slate-800 bg-slate-950 p-6 space-y-4">
-        <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 border-b border-slate-800/80 pb-4">
-          <Briefcase className="h-5 w-5 text-indigo-400" />
-          Open Position
-        </h3>
+      {/* 3. Open Position and Exit Plan section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="border-slate-800 bg-slate-950 p-6 space-y-4 lg:col-span-2">
+          <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 border-b border-slate-800/80 pb-4">
+            <Briefcase className="h-5 w-5 text-indigo-400" />
+            Open Position
+          </h3>
 
-        {openPositions.length === 0 ? (
-          <div className="text-center py-8 text-slate-500 text-sm font-medium">
-            No open strategy position
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-mono text-slate-300">
-              <thead>
-                <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Symbol</th>
-                  <th className="py-3 px-4">Side</th>
-                  <th className="py-3 px-4">Qty</th>
-                  <th className="py-3 px-4">Avg Price</th>
-                  <th className="py-3 px-4">LTP</th>
-                  <th className="py-3 px-4">Unrealized P&L</th>
-                  <th className="py-3 px-4">Total P&L</th>
-                  <th className="py-3 px-4">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-900">
-                {openPositions.map((pos) => {
-                  const sideFormatted = formatTradeSide(pos.side);
-                  const isLong = sideFormatted === "BUY";
-                  const unPnl = pos.unrealizedPnl;
-                  const totPnl = pos.totalPnl;
-                  return (
-                    <tr key={pos.id} className="hover:bg-slate-900/40">
-                      <td className="py-4 px-4 font-bold text-slate-200">{pos.symbol}</td>
-                      <td className="py-4 px-4">
-                        <Badge variant={isLong ? "success" : "danger"}>
-                          {isLong ? "LONG" : "SHORT"}
-                        </Badge>
-                      </td>
-                      <td className="py-4 px-4 font-semibold text-slate-200">{pos.quantity}</td>
-                      <td className="py-4 px-4 font-semibold">{formatCurrency(pos.avgPrice)}</td>
-                      <td className="py-4 px-4 font-semibold text-slate-200">{pos.ltp !== null ? formatCurrency(pos.ltp) : "-"}</td>
-                      <td className={`py-4 px-4 font-bold ${unPnl > 0 ? "text-emerald-400" : unPnl < 0 ? "text-rose-400" : "text-slate-300"}`}>
-                        {formatCurrency(unPnl)}
-                      </td>
-                      <td className={`py-4 px-4 font-bold ${totPnl > 0 ? "text-emerald-400" : totPnl < 0 ? "text-rose-400" : "text-slate-300"}`}>
-                        {formatCurrency(totPnl)}
-                      </td>
-                      <td className="py-4 px-4">
-                        <Badge variant="info" className="uppercase">{pos.status}</Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+          {openPositions.length === 0 ? (
+            <div className="text-center py-8 text-slate-500 text-sm font-medium">
+              No open strategy position
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-mono text-slate-300">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
+                    <th className="py-3 px-4">Symbol</th>
+                    <th className="py-3 px-4">Side</th>
+                    <th className="py-3 px-4">Qty</th>
+                    <th className="py-3 px-4">Avg Price</th>
+                    <th className="py-3 px-4">LTP</th>
+                    <th className="py-3 px-4">Unrealized P&L</th>
+                    <th className="py-3 px-4">Total P&L</th>
+                    <th className="py-3 px-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-900">
+                  {openPositions.map((pos) => {
+                    const sideFormatted = formatTradeSide(pos.side);
+                    const isLong = sideFormatted === "BUY";
+                    const unPnl = pos.unrealizedPnl;
+                    const totPnl = pos.totalPnl;
+                    return (
+                      <tr key={pos.id} className="hover:bg-slate-900/40">
+                        <td className="py-4 px-4 font-bold text-slate-200">{pos.symbol}</td>
+                        <td className="py-4 px-4">
+                          <Badge variant={isLong ? "success" : "danger"}>
+                            {isLong ? "LONG" : "SHORT"}
+                          </Badge>
+                        </td>
+                        <td className="py-4 px-4 font-semibold text-slate-200">{pos.quantity}</td>
+                        <td className="py-4 px-4 font-semibold">{formatCurrency(pos.avgPrice)}</td>
+                        <td className="py-4 px-4 font-semibold text-slate-200">{pos.ltp !== null ? formatCurrency(pos.ltp) : "-"}</td>
+                        <td className={`py-4 px-4 font-bold ${unPnl > 0 ? "text-emerald-400" : unPnl < 0 ? "text-rose-400" : "text-slate-300"}`}>
+                          {formatCurrency(unPnl)}
+                        </td>
+                        <td className={`py-4 px-4 font-bold ${totPnl > 0 ? "text-emerald-400" : totPnl < 0 ? "text-rose-400" : "text-slate-300"}`}>
+                          {formatCurrency(totPnl)}
+                        </td>
+                        <td className="py-4 px-4">
+                          <Badge variant="info" className="uppercase">{pos.status}</Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+
+        <div className="lg:col-span-1">
+          <ExitPlanCard
+            position={openPosition}
+            risk={strategy.risk}
+            currentPrice={runtimeStatus?.liveTick?.ltp ?? openPosition?.ltp ?? livePriceData?.tick?.ltp ?? null}
+          />
+        </div>
+      </div>
 
       {/* Grid: 4. Strategy Orders & 5. Live Logs */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

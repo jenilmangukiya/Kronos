@@ -101,6 +101,15 @@ export const StrategyDetails: React.FC = () => {
   const [isConfigExpanded, setIsConfigExpanded] = useState(false);
   const [isAdvancedExpanded, setIsAdvancedExpanded] = useState(false);
 
+  const [chartHeight, setChartHeight] = useState(window.innerWidth >= 1024 ? 420 : 300);
+  React.useEffect(() => {
+    const handleResize = () => {
+      setChartHeight(window.innerWidth >= 1024 ? 420 : 300);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-32">
@@ -197,7 +206,6 @@ export const StrategyDetails: React.FC = () => {
     let nearestCandle = candlesList[0];
     if (!nearestCandle) return null;
     let minDiff = Math.abs(Number(nearestCandle.time) - orderTimeSec);
-
     for (let i = 1; i < candlesList.length; i++) {
       const candle = candlesList[i];
       if (!candle) continue;
@@ -382,11 +390,18 @@ export const StrategyDetails: React.FC = () => {
     conditionStatusVariant = priceState.badgeVariant;
   }
 
-  // Create collapsible summary description
-  const configSummaryText = `${formatStrategyType(strategy.strategyType)} • ${formatInstrumentType(strategy.instrumentType)} • Rule: Spot ${strategy.rules.type === "UNDERLYING_CROSS_ABOVE" ? "Crosses Above" : "Crosses Below"} ${formatCurrency(strategy.rules.triggerPrice)} (Token: ${strategy.rules.underlyingToken}) • Trade: ${formatTradeSide(strategy.trade.side)} ${strategy.trade.quantity} qty of ${strategy.trade.symbol} • Risk: SL ${strategy.risk?.stopLossPercent ? `${strategy.risk.stopLossPercent}%` : "None"} / Target ${strategy.risk?.targetPercent ? `${strategy.risk.targetPercent}%` : "None"} / Re-entry: ${formatReEntryMode(strategy.risk?.reEntryMode)}`;
+  // Create collapsible summary description in one line
+  const configSummaryText = [
+    formatStrategyType(strategy.strategyType),
+    formatInstrumentType(strategy.instrumentType),
+    `Spot ${strategy.rules.type === "UNDERLYING_CROSS_ABOVE" ? "crosses above" : "crosses below"} ${formatCurrency(strategy.rules.triggerPrice)}`,
+    `Trade ${formatTradeSide(strategy.trade.side)} ${strategy.trade.symbol}`,
+    `SL ${strategy.risk?.stopLossPercent ? `${strategy.risk.stopLossPercent}%` : "None"}`,
+    `Target ${strategy.risk?.targetPercent ? `${strategy.risk.targetPercent}%` : "None"}`
+  ].filter(Boolean).join(" • ");
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-[1600px] mx-auto px-4 lg:px-8">
       {isBackendOffline && (
         <div className="bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm p-4 rounded-xl flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
@@ -405,16 +420,16 @@ export const StrategyDetails: React.FC = () => {
         </div>
       )}
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-800">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight text-white">{strategy.name}</h1>
-            <Badge variant={isRunning ? "success" : "neutral"} className={isRunning ? "animate-pulse" : ""}>
+            <h1 className="text-2xl font-bold tracking-tight text-white">{strategy.name}</h1>
+            <Badge variant={isRunning ? "success" : "neutral"} className={isRunning ? "animate-pulse font-semibold" : "font-semibold"}>
               {strategy.status}
             </Badge>
           </div>
-          <p className="text-slate-400 text-sm mt-1">
-            Live Strategy Monitoring & Execution Dashboard
+          <p className="text-slate-400 text-xs mt-1">
+            {formatStrategyType(strategy.strategyType)} • {strategy.mode} • {strategy.trade?.symbol || "-"} • {formatTradeSide(strategy.trade?.side)} • Qty {strategy.trade?.quantity || 0}
           </p>
         </div>
 
@@ -452,62 +467,19 @@ export const StrategyDetails: React.FC = () => {
         </div>
       )}
 
-      {/* Grid: 1. Top Status Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <Card className="p-4 border-slate-800 bg-slate-900/30">
-          <span className="text-slate-400 text-xs font-semibold block uppercase tracking-wider">Strategy Status</span>
-          <span className={`text-lg font-extrabold block mt-2 ${isRunning ? "text-emerald-400 animate-pulse" : "text-slate-400"}`}>
-            {strategy.status}
-          </span>
-        </Card>
-
-        <Card className="p-4 border-slate-800 bg-slate-900/30">
-          <span className="text-slate-400 text-xs font-semibold block uppercase tracking-wider">Mode</span>
-          <span className="text-lg font-extrabold text-blue-400 block mt-2">
-            {strategy.mode}
-          </span>
-        </Card>
-
-        <Card className="p-4 border-slate-800 bg-slate-900/30">
-          <span className="text-slate-400 text-xs font-semibold block uppercase tracking-wider">Strategy Type</span>
-          <span className="text-lg font-extrabold text-indigo-300 block mt-2 truncate" title={formatStrategyType(strategy.strategyType)}>
-            {formatStrategyType(strategy.strategyType)}
-          </span>
-        </Card>
-
-        <Card className="p-4 border-slate-800 bg-slate-900/30">
-          <span className="text-slate-400 text-xs font-semibold block uppercase tracking-wider">Last Triggered At</span>
-          <span className="text-sm font-semibold text-slate-200 block mt-2.5 truncate" title={strategy.lastTriggeredAt ? formatDate(strategy.lastTriggeredAt) : "Never"}>
-            {strategy.lastTriggeredAt ? formatDate(strategy.lastTriggeredAt) : "Never"}
-          </span>
-        </Card>
-
-        {/* 3. Improved Trades Today Card */}
-        <Card className="p-4 border-slate-800 bg-slate-900/30">
-          <span className="text-slate-400 text-xs font-semibold block uppercase tracking-wider">Trades Today</span>
-          <div className="flex items-baseline justify-between mt-2">
-            <span className="text-lg font-extrabold text-slate-200 font-mono">
-              {tradesToday} / {maxTradesPerDay}
-            </span>
-            <Badge variant={tradesLimitReached ? "danger" : "success"}>
-              {tradesLimitReached ? "Limit Reached" : "Available"}
-            </Badge>
-          </div>
-        </Card>
-      </div>
-
-      {/* Grid: Live Price Card, Runtime Status Card & Candle Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1 flex flex-col gap-6">
-          {/* 2. Live Price Card */}
-          <Card className="border-slate-800 bg-slate-900/40 p-6 space-y-4 flex-1 flex flex-col justify-between">
+      {/* Main Monitor Grid (2-column layout on desktop) */}
+      <div className="flex flex-col lg:flex-row gap-6 items-stretch">
+        {/* Left Control Column (350px width) */}
+        <div className="w-full lg:w-[350px] shrink-0 flex flex-col gap-4">
+          {/* Live Price Card */}
+          <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                  <Activity className="h-5 w-5 text-emerald-400" />
-                  Live Price Card
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-3">
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <Activity className="h-4.5 w-4.5 text-emerald-400" />
+                  Live Price
                 </h3>
-                <span className={`flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${
+                <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${
                   priceState.badgeVariant === "success"
                     ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
                     : priceState.badgeVariant === "danger"
@@ -523,18 +495,18 @@ export const StrategyDetails: React.FC = () => {
                 </span>
               </div>
 
-              <div className="flex flex-col gap-4 mt-4">
+              <div className="grid grid-cols-2 gap-4 mt-2">
                 <div>
-                  <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">Underlying LTP</span>
-                  <span className={`text-3xl font-extrabold mt-2 block font-mono ${
+                  <span className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Underlying LTP</span>
+                  <span className={`text-xl font-extrabold mt-1 block font-mono ${
                     isRunning && ltp !== null ? "text-emerald-400" : "text-slate-400"
                   }`}>
-                    {isRunning ? (ltp !== null ? formatCurrency(ltp) : (realtimeConnected ? "Waiting for live tick" : "Fetching...")) : "--"}
+                    {isRunning ? (ltp !== null ? formatCurrency(ltp) : (realtimeConnected ? "Waiting..." : "Fetching...")) : "--"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">Trigger Price</span>
-                  <span className="text-3xl font-extrabold text-slate-200 mt-2 block font-mono">
+                  <span className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Trigger Price</span>
+                  <span className="text-xl font-extrabold text-slate-200 mt-1 block font-mono">
                     {formatCurrency(triggerPrice)}
                   </span>
                 </div>
@@ -542,302 +514,324 @@ export const StrategyDetails: React.FC = () => {
 
               {/* Trigger price warning callout */}
               {showWarning && (
-                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs p-3 rounded-lg flex items-start gap-2 shadow-lg shadow-amber-500/5 mt-3">
-                  <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
+                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] p-2 rounded-lg flex items-start gap-1.5 shadow-lg mt-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>
-                    Trigger price is far from current underlying price. Please confirm this is intentional.
+                    Trigger price is far from current price.
                   </span>
                 </div>
               )}
 
               {/* Live Price Error or Disconnected Warning Callout */}
               {isRunning && priceState.state === "Live Disconnected" && (
-                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs p-3 rounded-lg flex items-start gap-2 shadow-lg shadow-rose-500/5 mt-3">
-                  <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
+                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] p-2 rounded-lg flex items-start gap-1.5 shadow-lg mt-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>
-                    Start strategy again or reconnect broker session
+                    Start strategy again or reconnect broker session.
                   </span>
                 </div>
               )}
 
               {isRunning && priceState.state === "Broker Session Expired" && (
-                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs p-3 rounded-lg flex items-start gap-2 shadow-lg shadow-rose-500/5 mt-3">
-                  <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
+                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] p-2 rounded-lg flex items-start gap-1.5 shadow-lg mt-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>
-                    Broker session expired. Please log in to your broker account again.
+                    Broker session expired. Please log in again.
                   </span>
                 </div>
               )}
             </div>
 
-            <div className="flex flex-col gap-4 pt-4 border-t border-slate-800/40 text-sm mt-4">
+            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-800/40 text-xs mt-3">
               <div>
-                <span className="text-slate-400 block text-xs font-medium uppercase tracking-wider">Rule Type</span>
+                <span className="text-slate-400 block text-[10px] font-semibold uppercase tracking-wider">Rule Type</span>
                 <span className="text-slate-200 font-semibold mt-0.5 block truncate" title={formatRuleType(ruleType)}>
                   {formatRuleType(ruleType)}
                 </span>
               </div>
               <div>
-                <span className="text-slate-400 block text-xs font-medium uppercase tracking-wider">Condition Status</span>
-                <div className="mt-1 flex flex-col gap-1 items-start">
-                  <Badge variant={conditionStatusVariant}>{conditionStatusText}</Badge>
-                  {isRunning && runtimeStatus?.reason && (
-                    <span className="text-[10px] text-slate-500 leading-tight block mt-1" title={runtimeStatus.reason}>
-                      {runtimeStatus.reason}
-                    </span>
-                  )}
+                <span className="text-slate-400 block text-[10px] font-semibold uppercase tracking-wider">Condition Status</span>
+                <div className="mt-1 flex flex-col gap-0.5 items-start">
+                  <Badge variant={conditionStatusVariant} className="px-1.5 py-0.5 text-[10px]">{conditionStatusText}</Badge>
                 </div>
               </div>
             </div>
           </Card>
 
           {/* Runtime Status Card */}
-          <Card className="border-slate-800 bg-slate-900/40 p-6 space-y-4 flex-1 flex flex-col justify-between">
+          <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-                <div className="flex flex-col gap-0.5">
-                  <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                    <Cpu className="h-5 w-5 text-indigo-400" />
-                    Runtime Status
-                  </h3>
-                  <span className="text-[10px] text-slate-500 font-medium">
-                    Realtime:{" "}
-                    <span className={realtimeConnected ? "text-emerald-400 font-semibold" : "text-amber-500 font-semibold"}>
-                      {realtimeConnected ? "Connected" : "Disconnected"}
-                    </span>
-                  </span>
-                </div>
-                {runtimeStatus && (
-                  <Badge
-                    variant={getStatusBadgeProps(runtimeStatus.reason, runtimeStatus.canEnter).variant}
-                    title={getStatusBadgeProps(runtimeStatus.reason, runtimeStatus.canEnter).tooltip}
-                    className="cursor-help font-semibold"
-                  >
-                    {getStatusBadgeProps(runtimeStatus.reason, runtimeStatus.canEnter).text}
-                  </Badge>
-                )}
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-3">
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <Cpu className="h-4.5 w-4.5 text-indigo-400" />
+                  Runtime Status
+                </h3>
+                <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${
+                  realtimeConnected
+                    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                    : "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                }`}>
+                  {realtimeConnected && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />}
+                  {realtimeConnected ? "Connected" : "Disconnected"}
+                </span>
               </div>
 
               {!runtimeStatus ? (
                 <div className="text-slate-500 text-xs py-4 text-center">Loading runtime status...</div>
               ) : (
-                <div className="space-y-3 mt-4">
-                  <div className="flex justify-between items-center text-sm">
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-900/40">
                     <span className="text-slate-400">Can Enter</span>
-                    <Badge variant={runtimeStatus.canEnter ? "success" : "neutral"}>
+                    <Badge variant={runtimeStatus.canEnter ? "success" : "neutral"} className="px-1.5 py-0.5 text-[10px]">
                       {runtimeStatus.canEnter ? "Yes" : "No"}
                     </Badge>
                   </div>
 
-                  <div className="flex justify-between items-start text-sm">
+                  <div className="flex justify-between items-start py-1 border-b border-slate-900/40">
                     <span className="text-slate-400 shrink-0">Reason</span>
-                    <span className="text-slate-250 text-right font-medium max-w-[70%] leading-snug">
-                      {runtimeStatus.reason}
+                    <span className="text-slate-200 text-right font-medium max-w-[70%] leading-tight break-words">
+                      {runtimeStatus.reason || "-"}
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-900/40">
                     <span className="text-slate-400">Trades Today</span>
-                    <span className="text-slate-250 font-semibold font-mono">
+                    <span className="text-slate-200 font-bold font-mono">
                       {runtimeStatus.tradesToday} / {runtimeStatus.maxTradesPerDay}
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-900/40">
                     <span className="text-slate-400">Re-entry Mode</span>
-                    <span className="text-slate-250 font-semibold">
+                    <span className="text-slate-200 font-semibold">
                       {formatReEntryMode(runtimeStatus.reEntryMode)}
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-900/40">
                     <span className="text-slate-400">Has Open Position</span>
-                    <Badge variant={runtimeStatus.hasOpenPosition ? "danger" : "success"}>
+                    <Badge variant={runtimeStatus.hasOpenPosition ? "danger" : "success"} className="px-1.5 py-0.5 text-[10px]">
                       {runtimeStatus.hasOpenPosition ? "Yes" : "No"}
                     </Badge>
                   </div>
 
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-400">Live Tick LTP</span>
-                    <span className="text-slate-250 font-semibold font-mono">
-                      {runtimeStatus.liveTick?.ltp !== undefined && runtimeStatus.liveTick?.ltp !== null
-                        ? formatCurrency(runtimeStatus.liveTick.ltp)
-                        : "Waiting..."}
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-400">Last Triggered</span>
+                    <span className="text-slate-200 font-semibold" title={strategy.lastTriggeredAt ? formatDate(strategy.lastTriggeredAt) : "Never"}>
+                      {strategy.lastTriggeredAt ? formatDate(strategy.lastTriggeredAt) : "Never"}
                     </span>
-                  </div>
-
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-400">Condition Matched</span>
-                    <Badge
-                      variant={
-                        runtimeStatus.condition?.matched
-                          ? "success"
-                          : runtimeStatus.condition === null
-                          ? "neutral"
-                          : "warning"
-                      }
-                    >
-                      {runtimeStatus.condition?.matched
-                        ? "Matched"
-                        : runtimeStatus.condition === null
-                        ? "N/A"
-                        : "Waiting"}
-                    </Badge>
                   </div>
                 </div>
               )}
             </div>
           </Card>
-        </div>
 
-        <div className="lg:col-span-2">
-          {/* 8. Candle Chart Card */}
-          <Card className="border-slate-800 bg-slate-900/40 p-6 flex flex-col space-y-4 h-full">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-              <div>
-                <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                  <LineChart className="h-5 w-5 text-indigo-400" />
-                  {strategy.trade?.symbol || "Strategy"} 5m Candles
-                </h3>
-                <p className="text-slate-500 text-xs mt-0.5">
-                  Refreshing every 30 seconds
-                </p>
-              </div>
-              {isCandlesFetching && (
-                <span className="flex items-center gap-1.5 text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 font-semibold uppercase tracking-wider">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-ping" />
-                  Updating
-                </span>
-              )}
-            </div>
-
-            {!strategy.trade?.token ? (
-              <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
-                <AlertCircle className="h-8 w-8 text-slate-500" />
-                <span>Select a trade instrument to view candles</span>
-              </div>
-            ) : !strategy.brokerAccountId ? (
-              <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
-                <AlertCircle className="h-8 w-8 text-slate-500" />
-                <span>Connect broker account to view candles</span>
-              </div>
-            ) : candlesError && !(isCandlesLoading || (isCandlesFetching && candles.length === 0)) ? (
-              <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-rose-400 text-xs space-y-2">
-                <AlertCircle className="h-8 w-8 text-rose-500/80" />
-                <span>Unable to load candle data</span>
-                <span className="text-[10px] text-slate-500 mt-1 max-w-xs text-center truncate px-4">
-                  {candlesError?.message || String(candlesError)}
-                </span>
-              </div>
-            ) : (
-              <CandleChart
-                candles={candles}
-                isLoading={isCandlesLoading || (isCandlesFetching && candles.length === 0)}
-                height={300}
-                emptyMessage="No candle data available yet"
-                markers={markers}
-                priceLines={priceLines}
-              />
-            )}
-          </Card>
-        </div>
-      </div>
-
-      {/* 3. Open Position and Exit Plan section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="border-slate-800 bg-slate-950 p-6 space-y-4 lg:col-span-2">
-          <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 border-b border-slate-800/80 pb-4">
-            <Briefcase className="h-5 w-5 text-indigo-400" />
-            Open Position
-          </h3>
-
-          {openPositions.length === 0 ? (
-            <div className="text-center py-8 text-slate-500 text-sm font-medium">
-              No open strategy position
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs font-mono text-slate-300">
-                <thead>
-                  <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
-                    <th className="py-3 px-4">Symbol</th>
-                    <th className="py-3 px-4">Side</th>
-                    <th className="py-3 px-4">Qty</th>
-                    <th className="py-3 px-4">Avg Price</th>
-                    <th className="py-3 px-4">LTP</th>
-                    <th className="py-3 px-4">Unrealized P&L</th>
-                    <th className="py-3 px-4">Total P&L</th>
-                    <th className="py-3 px-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-900">
-                  {openPositions.map((pos) => {
-                    const sideFormatted = formatTradeSide(pos.side);
-                    const isLong = sideFormatted === "BUY";
-                    const unPnl = pos.unrealizedPnl;
-                    const totPnl = pos.totalPnl;
-                    return (
-                      <tr key={pos.id} className="hover:bg-slate-900/40">
-                        <td className="py-4 px-4 font-bold text-slate-200">{pos.symbol}</td>
-                        <td className="py-4 px-4">
-                          <Badge variant={isLong ? "success" : "danger"}>
-                            {isLong ? "LONG" : "SHORT"}
-                          </Badge>
-                        </td>
-                        <td className="py-4 px-4 font-semibold text-slate-200">{pos.quantity}</td>
-                        <td className="py-4 px-4 font-semibold">{formatCurrency(pos.avgPrice)}</td>
-                        <td className="py-4 px-4 font-semibold text-slate-200">{pos.ltp !== null ? formatCurrency(pos.ltp) : "-"}</td>
-                        <td className={`py-4 px-4 font-bold ${unPnl > 0 ? "text-emerald-400" : unPnl < 0 ? "text-rose-400" : "text-slate-300"}`}>
-                          {formatCurrency(unPnl)}
-                        </td>
-                        <td className={`py-4 px-4 font-bold ${totPnl > 0 ? "text-emerald-400" : totPnl < 0 ? "text-rose-400" : "text-slate-300"}`}>
-                          {formatCurrency(totPnl)}
-                        </td>
-                        <td className="py-4 px-4">
-                          <Badge variant="info" className="uppercase">{pos.status}</Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-
-        <div className="lg:col-span-1">
+          {/* Exit Plan Card */}
           <ExitPlanCard
             position={openPosition}
             risk={strategy.risk}
             currentPrice={runtimeStatus?.liveTick?.ltp ?? openPosition?.ltp ?? livePriceData?.tick?.ltp ?? null}
           />
         </div>
+
+        {/* Right Large Chart Column */}
+        <div className="flex-grow flex flex-col min-w-0">
+          <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col h-full flex-grow">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <LineChart className="h-4.5 w-4.5 text-indigo-400" />
+                  {strategy.trade?.symbol || "Strategy"} 5m Candles
+                </h3>
+                <p className="text-slate-500 text-[10px] mt-0.5">
+                  Refreshing every 30 seconds
+                </p>
+              </div>
+              {isCandlesFetching && (
+                <span className="flex items-center gap-1.5 text-[9px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 font-semibold uppercase tracking-wider">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-ping" />
+                  Updating
+                </span>
+              )}
+            </div>
+
+            <div className="flex-grow flex flex-col justify-center min-h-[300px]">
+              {!strategy.trade?.token ? (
+                <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
+                  <AlertCircle className="h-8 w-8 text-slate-500" />
+                  <span>Select a trade instrument to view candles</span>
+                </div>
+              ) : !strategy.brokerAccountId ? (
+                <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
+                  <AlertCircle className="h-8 w-8 text-slate-500" />
+                  <span>Connect broker account to view candles</span>
+                </div>
+              ) : candlesError && !(isCandlesLoading || (isCandlesFetching && candles.length === 0)) ? (
+                <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-rose-400 text-xs space-y-2">
+                  <AlertCircle className="h-8 w-8 text-rose-500/80" />
+                  <span>Unable to load candle data</span>
+                  <span className="text-[10px] text-slate-500 mt-1 max-w-xs text-center truncate px-4">
+                    {candlesError?.message || String(candlesError)}
+                  </span>
+                </div>
+              ) : (
+                <CandleChart
+                  candles={candles}
+                  isLoading={isCandlesLoading || (isCandlesFetching && candles.length === 0)}
+                  height={chartHeight}
+                  emptyMessage="No candle data available yet"
+                  markers={markers}
+                  priceLines={priceLines}
+                />
+              )}
+            </div>
+          </Card>
+        </div>
       </div>
 
-      {/* Grid: 4. Strategy Orders & 5. Live Logs */}
+      {/* Position Section */}
+      <Card className="border-slate-800 bg-slate-950 p-4">
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
+          <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+            <Briefcase className="h-4.5 w-4.5 text-indigo-400" />
+            Open Position
+          </h3>
+          {openPositions.length > 0 && openPositions[0] && (
+            <Badge variant="info" className="uppercase font-mono text-[10px]">
+              {openPositions[0].status}
+            </Badge>
+          )}
+        </div>
+
+        {openPositions.length === 0 ? (
+          <div className="text-center py-6 text-slate-500 text-xs font-medium">
+            No open strategy position
+          </div>
+        ) : openPositions.length === 1 ? (
+          (() => {
+            const pos = openPositions[0];
+            if (!pos) return null;
+            const sideFormatted = formatTradeSide(pos.side);
+            const isLong = sideFormatted === "BUY";
+            const unPnl = pos.unrealizedPnl;
+            const totPnl = pos.totalPnl;
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 items-center font-mono text-xs">
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase font-semibold">Symbol</span>
+                  <span className="text-slate-200 font-bold text-sm block mt-0.5">{pos.symbol}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase font-semibold">Side</span>
+                  <Badge variant={isLong ? "success" : "danger"} className="mt-1 px-1.5 py-0.5 text-[9px] font-bold">
+                    {isLong ? "LONG" : "SHORT"}
+                  </Badge>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase font-semibold">Qty</span>
+                  <span className="text-slate-200 font-bold block mt-0.5">{pos.quantity}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase font-semibold">Avg Price</span>
+                  <span className="text-slate-200 font-bold block mt-0.5">{formatCurrency(pos.avgPrice)}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase font-semibold">LTP</span>
+                  <span className="text-slate-200 font-bold block mt-0.5">{pos.ltp !== null ? formatCurrency(pos.ltp) : "-"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase font-semibold">Unrealized P&L</span>
+                  <span className={`font-bold block mt-0.5 text-sm ${unPnl > 0 ? "text-emerald-400" : unPnl < 0 ? "text-rose-400" : "text-slate-300"}`}>
+                    {formatCurrency(unPnl)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase font-semibold">Total P&L</span>
+                  <span className={`font-bold block mt-0.5 text-sm ${totPnl > 0 ? "text-emerald-400" : totPnl < 0 ? "text-rose-400" : "text-slate-300"}`}>
+                    {formatCurrency(totPnl)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[9px] uppercase font-semibold">Status</span>
+                  <Badge variant="info" className="uppercase mt-1 px-1.5 py-0.5 text-[9px] font-bold">{pos.status}</Badge>
+                </div>
+              </div>
+            );
+          })()
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs font-mono text-slate-300">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[9px]">
+                  <th className="py-2.5 px-3">Symbol</th>
+                  <th className="py-2.5 px-3">Side</th>
+                  <th className="py-2.5 px-3">Qty</th>
+                  <th className="py-2.5 px-3">Avg Price</th>
+                  <th className="py-2.5 px-3">LTP</th>
+                  <th className="py-2.5 px-3">Unrealized P&L</th>
+                  <th className="py-2.5 px-3">Total P&L</th>
+                  <th className="py-2.5 px-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-900">
+                {openPositions.map((pos) => {
+                  const sideFormatted = formatTradeSide(pos.side);
+                  const isLong = sideFormatted === "BUY";
+                  const unPnl = pos.unrealizedPnl;
+                  const totPnl = pos.totalPnl;
+                  return (
+                    <tr key={pos.id} className="hover:bg-slate-900/40">
+                      <td className="py-3 px-3 font-bold text-slate-200">{pos.symbol}</td>
+                      <td className="py-3 px-3">
+                        <Badge variant={isLong ? "success" : "danger"} className="px-1.5 py-0.5 text-[9px] font-bold">
+                          {isLong ? "LONG" : "SHORT"}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-3 font-semibold text-slate-200">{pos.quantity}</td>
+                      <td className="py-3 px-3 font-semibold">{formatCurrency(pos.avgPrice)}</td>
+                      <td className="py-3 px-3 font-semibold text-slate-200">{pos.ltp !== null ? formatCurrency(pos.ltp) : "-"}</td>
+                      <td className={`py-3 px-3 font-bold ${unPnl > 0 ? "text-emerald-400" : unPnl < 0 ? "text-rose-400" : "text-slate-300"}`}>
+                        {formatCurrency(unPnl)}
+                      </td>
+                      <td className={`py-3 px-3 font-bold ${totPnl > 0 ? "text-emerald-400" : totPnl < 0 ? "text-rose-400" : "text-slate-300"}`}>
+                        {formatCurrency(totPnl)}
+                      </td>
+                      <td className="py-3 px-3">
+                        <Badge variant="info" className="uppercase px-1.5 py-0.5 text-[9px] font-bold">{pos.status}</Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* Orders and Logs Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 4. Strategy Orders */}
-        <Card className="border-slate-800 bg-slate-950 p-6 space-y-4">
-          <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 border-b border-slate-800/80 pb-4">
-            <Layers className="h-5 w-5 text-indigo-400" />
+        {/* Strategy Orders */}
+        <Card className="border-slate-800 bg-slate-950 p-4 space-y-3">
+          <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2 border-b border-slate-800/80 pb-2">
+            <Layers className="h-4.5 w-4.5 text-indigo-400" />
             Strategy Orders
           </h3>
 
           {strategyOrders.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-sm font-medium">
+            <div className="text-center py-10 text-slate-500 text-xs font-medium">
               No orders executed yet.
             </div>
           ) : (
             <div className="overflow-y-auto max-h-[300px] pr-2 custom-scrollbar">
               <table className="w-full text-left text-xs font-mono text-slate-300">
                 <thead>
-                  <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
-                    <th className="py-2 px-2">Time</th>
-                    <th className="py-2 px-2">Side</th>
-                    <th className="py-2 px-2">Symbol</th>
-                    <th className="py-2 px-2">Qty</th>
-                    <th className="py-2 px-2">Price</th>
-                    <th className="py-2 px-2 text-right">Status</th>
+                  <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[9px]">
+                    <th className="py-2 px-1">Time</th>
+                    <th className="py-2 px-1">Side</th>
+                    <th className="py-2 px-1">Symbol</th>
+                    <th className="py-2 px-1">Qty</th>
+                    <th className="py-2 px-1">Price</th>
+                    <th className="py-2 px-1 text-right">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-900/60">
@@ -851,17 +845,17 @@ export const StrategyDetails: React.FC = () => {
                     const sideFormatted = formatTradeSide(order.side);
                     return (
                       <tr key={order.id} className="hover:bg-slate-900/20">
-                        <td className="py-3 px-2 text-slate-400">{orderTime}</td>
-                        <td className="py-3 px-2">
-                          <Badge variant={sideFormatted === "BUY" ? "success" : "danger"}>
+                        <td className="py-2.5 px-1 text-slate-400">{orderTime}</td>
+                        <td className="py-2.5 px-1">
+                          <Badge variant={sideFormatted === "BUY" ? "success" : "danger"} className="px-1.5 py-0.5 text-[9px] font-bold">
                             {sideFormatted}
                           </Badge>
                         </td>
-                        <td className="py-3 px-2 font-bold text-slate-200">{order.symbol}</td>
-                        <td className="py-3 px-2 font-semibold text-slate-200">{order.quantity}</td>
-                        <td className="py-3 px-2 font-semibold text-slate-100">{formatCurrency(order.price)}</td>
-                        <td className="py-3 px-2 text-right">
-                          <Badge variant={order.status === "FILLED" ? "success" : "danger"}>
+                        <td className="py-2.5 px-1 font-bold text-slate-200">{order.symbol}</td>
+                        <td className="py-2.5 px-1 font-semibold text-slate-200">{order.quantity}</td>
+                        <td className="py-2.5 px-1 font-semibold text-slate-100">{formatCurrency(order.price)}</td>
+                        <td className="py-2.5 px-1 text-right">
+                          <Badge variant={order.status === "FILLED" ? "success" : "danger"} className="px-1.5 py-0.5 text-[9px] font-bold">
                             {order.status}
                           </Badge>
                         </td>
@@ -874,30 +868,30 @@ export const StrategyDetails: React.FC = () => {
           )}
         </Card>
 
-        {/* 5. Live Logs */}
+        {/* Live Logs */}
         <StrategyLogs logs={logs} isPolling={isRunning} />
       </div>
 
-      {/* 6. Collapsible Config Section */}
+      {/* Collapsible Config Section */}
       <Card className="border-slate-800 bg-slate-950/20 p-4">
         <button
           onClick={() => setIsConfigExpanded(!isConfigExpanded)}
-          className="w-full flex items-center justify-between py-2 text-slate-300 hover:text-white transition-colors duration-150"
+          className="w-full flex items-center justify-between py-1 text-slate-300 hover:text-white transition-colors duration-150"
         >
           <div className="flex items-center gap-2">
-            <Sliders className="h-5 w-5 text-slate-400" />
-            <span className="font-bold text-sm uppercase tracking-wider">Strategy Config</span>
+            <Sliders className="h-4.5 w-4.5 text-slate-400" />
+            <span className="font-bold text-xs uppercase tracking-wider">Strategy Config</span>
           </div>
           <div className="flex items-center gap-3">
             {!isConfigExpanded && (
-              <span className="hidden lg:inline text-xs text-slate-500 font-medium truncate max-w-xl">
+              <span className="hidden lg:inline text-xs text-slate-500 font-medium truncate max-w-[800px]">
                 {configSummaryText}
               </span>
             )}
             {isConfigExpanded ? (
-              <ChevronUp className="h-5 w-5 text-slate-400" />
+              <ChevronUp className="h-4.5 w-4.5 text-slate-400" />
             ) : (
-              <ChevronDown className="h-5 w-5 text-slate-400" />
+              <ChevronDown className="h-4.5 w-4.5 text-slate-400" />
             )}
           </div>
         </button>

@@ -44,28 +44,26 @@ export const StrategyActions: React.FC<StrategyActionsProps> = ({
   const isStopExitDisabled = strategy.status === "STOPPED" && !hasOpenPosition;
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-800/80 pt-6">
-      <div>
-        <Link to="/dashboard/strategies">
-          <Button variant="outline" className="gap-2" disabled={isAnyLoading}>
-            <ArrowLeft className="h-4.5 w-4.5" />
-            Back to Strategies
-          </Button>
-        </Link>
-      </div>
+    <div className="flex flex-wrap items-center gap-2 md:justify-end w-full md:w-auto">
+      <Link to="/dashboard/strategies" className="w-full sm:w-auto">
+        <Button variant="outline" className="gap-1.5 px-3 py-1.5 text-xs w-full justify-center" disabled={isAnyLoading}>
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to Strategies
+        </Button>
+      </Link>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
         {/* Reset Button */}
         <Button
           variant="outline"
-          className="gap-2 border-slate-700 text-slate-300 hover:bg-slate-800"
+          className="flex-1 sm:flex-none gap-1.5 px-3 py-1.5 text-xs border-slate-700 text-slate-300 hover:bg-slate-800 justify-center"
           disabled={isAnyLoading}
           onClick={onReset}
         >
           {isResetLoading ? (
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
           ) : (
-            <RotateCcw className="h-4 w-4" />
+            <RotateCcw className="h-3.5 w-3.5" />
           )}
           Reset
         </Button>
@@ -73,14 +71,14 @@ export const StrategyActions: React.FC<StrategyActionsProps> = ({
         {/* Duplicate Button */}
         <Button
           variant="outline"
-          className="gap-2 border-slate-700 text-slate-300 hover:bg-slate-800"
+          className="flex-1 sm:flex-none gap-1.5 px-3 py-1.5 text-xs border-slate-700 text-slate-300 hover:bg-slate-800 justify-center"
           disabled={isAnyLoading}
           onClick={onDuplicate}
         >
           {isDuplicateLoading ? (
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
           ) : (
-            <Copy className="h-4 w-4" />
+            <Copy className="h-3.5 w-3.5" />
           )}
           Duplicate
         </Button>
@@ -90,28 +88,28 @@ export const StrategyActions: React.FC<StrategyActionsProps> = ({
           <>
             <Button
               variant="danger"
-              className="gap-2"
+              className="flex-1 sm:flex-none gap-1.5 px-3 py-1.5 text-xs justify-center"
               disabled={isAnyLoading}
               onClick={onStop}
             >
               {isStopLoading ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
               ) : (
-                <Square className="h-4 w-4 fill-current" />
+                <Square className="h-3.5 w-3.5 fill-current" />
               )}
               Stop
             </Button>
 
             <Button
               variant="danger"
-              className="gap-2 !bg-amber-600 hover:!bg-amber-500 border-amber-600 hover:border-amber-500 text-white shadow-amber-500/10"
+              className="flex-1 sm:flex-none gap-1.5 px-3 py-1.5 text-xs !bg-amber-600 hover:!bg-amber-500 border-amber-600 hover:border-amber-500 text-white shadow-amber-500/10 justify-center"
               disabled={isAnyLoading || isStopExitDisabled}
               onClick={onStopExit}
             >
               {isStopExitLoading ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
               ) : (
-                <StopCircle className="h-4 w-4" />
+                <StopCircle className="h-3.5 w-3.5" />
               )}
               Stop & Exit
             </Button>
@@ -120,28 +118,28 @@ export const StrategyActions: React.FC<StrategyActionsProps> = ({
           <>
             <Button
               variant="primary"
-              className="gap-2 !from-emerald-600 !to-teal-600 hover:!from-emerald-500 hover:!to-teal-500 shadow-emerald-500/10"
+              className="flex-1 sm:flex-none gap-1.5 px-3 py-1.5 text-xs !from-emerald-600 !to-teal-600 hover:!from-emerald-500 hover:!to-teal-500 shadow-emerald-500/10 justify-center"
               disabled={isAnyLoading}
               onClick={onStart}
             >
               {isStartLoading ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
               ) : (
-                <Play className="h-4 w-4 fill-current" />
+                <Play className="h-3.5 w-3.5 fill-current" />
               )}
               Start
             </Button>
 
             <Button
               variant="danger"
-              className="gap-2 !bg-amber-600 hover:!bg-amber-500 border-amber-600 hover:border-amber-500 text-white shadow-amber-500/10"
+              className="flex-1 sm:flex-none gap-1.5 px-3 py-1.5 text-xs !bg-amber-600 hover:!bg-amber-500 border-amber-600 hover:border-amber-500 text-white shadow-amber-500/10 justify-center"
               disabled={isAnyLoading || isStopExitDisabled}
               onClick={onStopExit}
             >
               {isStopExitLoading ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
               ) : (
-                <StopCircle className="h-4 w-4" />
+                <StopCircle className="h-3.5 w-3.5" />
               )}
               Stop & Exit
             </Button>

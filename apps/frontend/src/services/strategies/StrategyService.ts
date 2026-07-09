@@ -155,6 +155,12 @@ export interface StrategyRuntimeStatus {
     exchangeTimestamp: number;
     ltp: number;
   } | null;
+  tradeTick?: {
+    token: string;
+    sequenceNumber: string;
+    exchangeTimestamp: number;
+    ltp: number;
+  } | null;
   condition?: {
     type: string;
     triggerPrice: number;

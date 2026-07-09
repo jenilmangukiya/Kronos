@@ -43,19 +43,24 @@ export const ExitPlanCard: React.FC<ExitPlanCardProps> = ({
   return (
     <Card className="border-slate-800 bg-slate-900/40 p-4 space-y-4">
       {/* Title Header */}
-      <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-        <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-          <Compass className="h-4.5 w-4.5 text-indigo-400" />
-          Exit Plan
-        </h3>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-slate-400 font-mono font-bold">
-            {exitPlan.symbol}
-          </span>
-          <Badge variant={isLong ? "success" : "danger"} className="px-1.5 py-0.5 text-[10px]">
-            {exitPlan.side}
-          </Badge>
+      <div className="flex flex-col gap-1 border-b border-slate-800/80 pb-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+            <Compass className="h-4.5 w-4.5 text-indigo-400" />
+            Exit Plan
+          </h3>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-400 font-mono font-bold">
+              {exitPlan.symbol}
+            </span>
+            <Badge variant={isLong ? "success" : "danger"} className="px-1.5 py-0.5 text-[10px]">
+              {exitPlan.side}
+            </Badge>
+          </div>
         </div>
+        <span className="text-[10px] text-slate-500 font-medium">
+          Based on trade instrument price
+        </span>
       </div>
 
       {/* Grid: Entry Price & Current Price & Action */}

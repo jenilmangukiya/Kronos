@@ -474,24 +474,29 @@ export const StrategyDetails: React.FC = () => {
           {/* Live Price Card */}
           <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-3">
-                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                  <Activity className="h-4.5 w-4.5 text-emerald-400" />
-                  Live Price
-                </h3>
-                <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${
-                  priceState.badgeVariant === "success"
-                    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-                    : priceState.badgeVariant === "danger"
-                    ? "text-rose-400 bg-rose-500/10 border-rose-500/20"
-                    : priceState.badgeVariant === "warning"
-                    ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
-                    : "text-slate-400 bg-slate-500/10 border-slate-800"
-                }`}>
-                  {priceState.badgeVariant === "success" && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  )}
-                  {priceState.state}
+              <div className="flex flex-col gap-1 border-b border-slate-800/80 pb-2 mb-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <Activity className="h-4.5 w-4.5 text-emerald-400" />
+                    Watch Price
+                  </h3>
+                  <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${
+                    priceState.badgeVariant === "success"
+                      ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                      : priceState.badgeVariant === "danger"
+                      ? "text-rose-400 bg-rose-500/10 border-rose-500/20"
+                      : priceState.badgeVariant === "warning"
+                      ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                      : "text-slate-400 bg-slate-500/10 border-slate-800"
+                  }`}>
+                    {priceState.badgeVariant === "success" && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    )}
+                    {priceState.state}
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-500 font-medium">
+                  Used for entry condition
                 </span>
               </div>
 
@@ -630,7 +635,19 @@ export const StrategyDetails: React.FC = () => {
           <ExitPlanCard
             position={openPosition}
             risk={strategy.risk}
-            currentPrice={runtimeStatus?.liveTick?.ltp ?? openPosition?.ltp ?? livePriceData?.tick?.ltp ?? null}
+            currentPrice={(() => {
+              const latestTradeCandleClose = candles.length > 0 ? candles[candles.length - 1]?.close : null;
+              const isUnderlyingSameAsTrade = strategy.rules?.underlyingToken === strategy.trade?.token;
+              return (
+                openPosition?.ltp ??
+                (openPosition as any)?.currentPrice ??
+                (openPosition as any)?.livePrice ??
+                runtimeStatus?.tradeTick?.ltp ??
+                latestTradeCandleClose ??
+                openPosition?.avgPrice ??
+                (isUnderlyingSameAsTrade ? (runtimeStatus?.liveTick?.ltp ?? livePriceData?.tick?.ltp ?? null) : null)
+              );
+            })()}
           />
         </div>
 

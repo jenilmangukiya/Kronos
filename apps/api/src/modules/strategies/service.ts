@@ -487,6 +487,11 @@ export class StrategyService {
       ? liveTickStore.getTick(brokerAccountId, underlyingToken)
       : null;
 
+    const tradeToken = trade.token;
+    const tradeTick = (brokerAccountId && tradeToken)
+      ? liveTickStore.getTick(brokerAccountId, tradeToken)
+      : null;
+
     const condition = this.getConditionPreview(strategy, tick);
 
     let canEnter = false;
@@ -532,6 +537,7 @@ export class StrategyService {
       canEnter,
       reason,
       liveTick: tick,
+      tradeTick,
       condition,
       state: strategy.state || {},
     };

@@ -16,4 +16,7 @@ export interface StrategyFormValues {
   stopLossPercent?: number;
   targetPercent?: number;
   reEntryMode: "NO_REENTRY" | "AFTER_EXIT" | "AFTER_NEW_SIGNAL";
+  tradeStrike?: string;
+  tradeOptionType?: "CE" | "PE";
+  tradeLots?: number;
 }

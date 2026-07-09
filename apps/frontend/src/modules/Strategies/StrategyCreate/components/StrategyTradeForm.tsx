@@ -27,27 +27,32 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
   isOptionChainLoading,
 }) => {
   const isFuture = form.instrumentType === "FUTURE";
-  const [selectedStrike, setSelectedStrike] = useState<string>("");
-  const [selectedOptionType, setSelectedOptionType] = useState<"CE" | "PE">("CE");
+  const selectedStrike = form.tradeStrike || "";
+  const selectedOptionType = form.tradeOptionType || "CE";
+
+  const lotSize = form.symbol === "BANKNIFTY" ? 15 : form.symbol === "NIFTY" ? 65 : 1;
 
   // Default selected strike to ATM when option chain loads
   useEffect(() => {
     if (!isFuture && optionChain?.rows && optionChain.rows.length > 0) {
       const atm = optionChain.underlying?.atmStrike;
-      if (atm) {
-        setSelectedStrike(atm.toString());
-      } else {
-        const midIndex = Math.floor(optionChain.rows.length / 2);
-        setSelectedStrike(optionChain.rows[midIndex].strike.toString());
+      const defaultStrike = atm
+        ? atm.toString()
+        : optionChain.rows[Math.floor(optionChain.rows.length / 2)].strike.toString();
+      
+      const hasCurrentStrike = optionChain.rows.some((r: any) => r.strike.toString() === form.tradeStrike);
+      if (!form.tradeStrike || !hasCurrentStrike) {
+        onChange("tradeStrike", defaultStrike);
       }
     }
-  }, [optionChain, isFuture]);
+  }, [optionChain, isFuture, form.tradeStrike]);
 
   // Update token and symbol on Strike or Type change
   useEffect(() => {
-    if (!isFuture && optionChain?.rows && selectedStrike) {
-      const row = optionChain.rows.find((r: any) => r.strike.toString() === selectedStrike);
-      const leg = row ? (selectedOptionType === "CE" ? row.ce : row.pe) : null;
+    if (!isFuture && optionChain?.rows && form.tradeStrike) {
+      const optionType = form.tradeOptionType || "CE";
+      const row = optionChain.rows.find((r: any) => r.strike.toString() === form.tradeStrike);
+      const leg = row ? (optionType === "CE" ? row.ce : row.pe) : null;
       if (leg) {
         onChange("tradeToken", leg.token);
         onChange("tradeSymbol", leg.symbol);
@@ -56,7 +61,7 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
         onChange("tradeSymbol", "");
       }
     }
-  }, [selectedStrike, selectedOptionType, optionChain, isFuture]);
+  }, [form.tradeStrike, form.tradeOptionType, optionChain, isFuture]);
 
   const handleFutureChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const token = e.target.value;
@@ -104,14 +109,29 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
           onChange={(e) => onChange("tradeSide", e.target.value)}
         />
 
-        {/* Quantity */}
-        <Input
-          label="Order Quantity (Lots / Units)"
-          type="number"
-          placeholder="e.g. 65"
-          value={form.tradeQuantity || ""}
-          onChange={(e) => onChange("tradeQuantity", parseInt(e.target.value) || 0)}
-        />
+        {/* Quantity / Lots */}
+        {isFuture ? (
+          <Input
+            label="Order Quantity (Lots / Units)"
+            type="number"
+            placeholder="e.g. 65"
+            value={form.tradeQuantity || ""}
+            onChange={(e) => onChange("tradeQuantity", parseInt(e.target.value) || 0)}
+          />
+        ) : (
+          <div className="w-full">
+            <Input
+              label="Order Quantity (Lots)"
+              type="number"
+              placeholder="e.g. 1"
+              value={form.tradeLots || ""}
+              onChange={(e) => onChange("tradeLots", parseInt(e.target.value) || 0)}
+            />
+            <div className="text-xs text-slate-400 mt-1.5 font-medium">
+              1 lot = {lotSize} qty (Total: {(form.tradeLots || 0) * lotSize} qty)
+            </div>
+          </div>
+        )}
 
         {isFuture ? (
           /* FUTURE Layout */
@@ -167,13 +187,13 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
                       label="Strike Price"
                       value={selectedStrike}
                       options={strikeOptions}
-                      onChange={(e) => setSelectedStrike(e.target.value)}
+                      onChange={(e) => onChange("tradeStrike", e.target.value)}
                     />
                     <Select
                       label="Option Type"
                       value={selectedOptionType}
                       options={optTypeOptions}
-                      onChange={(e) => setSelectedOptionType(e.target.value as "CE" | "PE")}
+                      onChange={(e) => onChange("tradeOptionType", e.target.value as "CE" | "PE")}
                     />
                   </>
                 )}
@@ -182,19 +202,52 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
           </>
         )}
 
-        {/* Selected asset details preview */}
+        {/* Selected asset details preview and Strategy summary preview */}
         {form.tradeToken && form.tradeSymbol && (
-          <div className="sm:col-span-2 bg-slate-900/60 border border-indigo-500/10 rounded-xl p-4 text-xs space-y-1 text-slate-400">
-            <span className="font-bold text-slate-300 block mb-1">Target Asset Asset Block:</span>
-            <div>
-              Symbol: <span className="font-mono text-indigo-400 font-bold">{form.tradeSymbol}</span>
-            </div>
-            <div>
-              Token ID: <span className="font-mono">{form.tradeToken}</span>
-            </div>
-            {optionChain?.underlying?.ltp && !isFuture && (
+          <div className="sm:col-span-2 space-y-4">
+            <div className="bg-slate-900/60 border border-indigo-500/10 rounded-xl p-4 text-xs space-y-1.5 text-slate-400">
+              <span className="font-bold text-slate-300 block mb-1">Target Execution Asset:</span>
               <div>
-                Underlying Index LTP: ₹{optionChain.underlying.ltp.toLocaleString("en-IN")}
+                Symbol: <span className="font-mono text-indigo-400 font-bold">{form.tradeSymbol}</span>
+              </div>
+              <div>
+                Token ID: <span className="font-mono">{form.tradeToken}</span>
+              </div>
+              {optionChain?.underlying?.ltp && !isFuture && (
+                <div>
+                  Underlying Index LTP: ₹{optionChain.underlying.ltp.toLocaleString("en-IN")}
+                </div>
+              )}
+            </div>
+
+            {form.triggerPrice > 0 && (
+              <div className="bg-slate-900/60 border border-indigo-500/20 rounded-xl p-4 text-xs space-y-2 text-slate-300">
+                <span className="font-bold text-indigo-400 block uppercase tracking-wider text-[10px]">Strategy Summary Preview</span>
+                <div className="grid grid-cols-2 gap-4 border-b border-slate-800 pb-2 text-[11px]">
+                  <div>
+                    <span className="text-slate-500 font-medium block">Watch</span>
+                    <span className="font-semibold text-slate-200">{form.symbol} Spot</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 font-medium block">Trade</span>
+                    <span className="font-semibold text-slate-200">{isFuture ? "Future Contract" : "Option Contract"}</span>
+                  </div>
+                </div>
+                <div className="pt-1 text-slate-300 leading-relaxed text-sm">
+                  If <span className="font-bold text-slate-100">{form.symbol} Spot</span>{" "}
+                  {form.ruleType === "UNDERLYING_CROSS_ABOVE" ? "crosses above" : "crosses below"}{" "}
+                  <span className="font-bold text-slate-100">₹{(form.triggerPrice || 0).toLocaleString("en-IN")}</span>,
+                  <br />
+                  <span className={`font-bold ${form.tradeSide === "BUY" ? "text-emerald-400" : "text-rose-400"}`}>
+                    {form.tradeSide}
+                  </span>{" "}
+                  <span className="font-bold text-indigo-400 font-mono">{form.tradeSymbol}</span>
+                  {!isFuture && (
+                    <span className="text-slate-400 text-xs ml-1.5 font-normal">
+                      ({form.tradeLots || 0} Lot{(form.tradeLots || 0) > 1 ? "s" : ""} = {(form.tradeLots || 0) * lotSize} qty)
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>

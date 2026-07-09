@@ -25,6 +25,9 @@ export const useStrategyCreate = () => {
     stopLossPercent: undefined,
     targetPercent: undefined,
     reEntryMode: "NO_REENTRY",
+    tradeStrike: "",
+    tradeOptionType: "CE",
+    tradeLots: 1,
   });
 
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -71,6 +74,9 @@ export const useStrategyCreate = () => {
       tradeToken: "",
       tradeSymbol: "",
       tradeExpiry: "",
+      tradeStrike: "",
+      tradeOptionType: "CE",
+      tradeLots: 1,
       tradeQuantity: prev.symbol === "NIFTY" ? 65 : 15,
     }));
   }, [form.symbol, form.instrumentType]);
@@ -98,16 +104,44 @@ export const useStrategyCreate = () => {
       setValidationError("Trigger price must be greater than 0");
       return;
     }
-    if (!form.tradeToken || !form.tradeSymbol) {
-      setValidationError("Please select a contract or trade asset for execution");
-      return;
-    }
-    if (form.tradeQuantity <= 0) {
-      setValidationError("Trade quantity must be greater than 0");
-      return;
+
+    if (form.instrumentType === "OPTION") {
+      if (!form.tradeExpiry) {
+        setValidationError("Option expiry is required");
+        return;
+      }
+      if (!form.tradeStrike) {
+        setValidationError("Strike price is required");
+        return;
+      }
+      if (!form.tradeOptionType) {
+        setValidationError("Option type is required");
+        return;
+      }
+      if (!form.tradeLots || form.tradeLots <= 0) {
+        setValidationError("Lots must be greater than 0");
+        return;
+      }
+      if (!form.tradeToken || !form.tradeSymbol) {
+        setValidationError("No option contract found for selected expiry/strike/type.");
+        return;
+      }
+    } else {
+      if (!form.tradeToken || !form.tradeSymbol) {
+        setValidationError("Please select a contract or trade asset for execution");
+        return;
+      }
+      if (form.tradeQuantity <= 0) {
+        setValidationError("Trade quantity must be greater than 0");
+        return;
+      }
     }
 
     const underlying = UNDERLYING_TOKENS[form.symbol];
+    const lotSize = form.symbol === "BANKNIFTY" ? 15 : form.symbol === "NIFTY" ? 65 : 1;
+    const quantity = form.instrumentType === "OPTION"
+      ? (form.tradeLots || 0) * lotSize
+      : Number(form.tradeQuantity);
 
     const body: CreateStrategyRequest = {
       brokerAccountId,
@@ -128,7 +162,7 @@ export const useStrategyCreate = () => {
         exchangeType: 2, // NFO exchangeType
         exchange: "NFO",
         side: form.tradeSide,
-        quantity: Number(form.tradeQuantity),
+        quantity: quantity,
       },
       risk: {
         maxTradesPerDay: Number(form.maxTradesPerDay),

@@ -29,6 +29,10 @@ export const StrategyInfoCard: React.FC<StrategyInfoCardProps> = ({ strategy }) 
       })
     : "Never";
 
+  const isOption = strategy.instrumentType === "OPTION";
+  const lotSize = strategy.symbol.toUpperCase().includes("BANKNIFTY") ? 15 : strategy.symbol.toUpperCase().includes("NIFTY") ? 65 : 1;
+  const lots = strategy.trade.quantity / lotSize;
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {/* Configuration Summary Card */}
@@ -131,7 +135,14 @@ export const StrategyInfoCard: React.FC<StrategyInfoCardProps> = ({ strategy }) 
             </div>
             <div>
               <span className="text-slate-400 block font-medium">Quantity</span>
-              <span className="text-slate-100 font-bold mt-0.5 block">{strategy.trade.quantity} units</span>
+              <span className="text-slate-100 font-bold mt-0.5 block">
+                {strategy.trade.quantity} units
+                {isOption && (
+                  <span className="text-slate-400 text-[10px] font-normal ml-1">
+                    ({lots} Lot{lots > 1 ? "s" : ""})
+                  </span>
+                )}
+              </span>
             </div>
             <div className="col-span-2">
               <span className="text-slate-400 block font-medium">Execution Asset Symbol</span>

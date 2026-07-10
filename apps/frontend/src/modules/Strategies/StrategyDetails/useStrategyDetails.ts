@@ -67,9 +67,9 @@ export const useStrategyDetails = () => {
   const underlyingToken = strategy?.rules?.underlyingToken || "";
   const brokerAccountId = strategy?.brokerAccountId || "";
 
-  const wsAdaptivePollInterval = realtimeConnected ? 15000 : pollInterval;
+  const wsAdaptivePollInterval = realtimeConnected ? false : (isBackendOffline ? false : 5000);
 
-  // Poll logs every 2 seconds
+  // Poll logs (fallback when WebSocket disconnected)
   const {
     data: logs = [],
     isLoading: isLogsLoading,
@@ -91,7 +91,7 @@ export const useStrategyDetails = () => {
 
   const runtimeStatus = realtime.runtimeStatus ?? restRuntimeStatus;
 
-  // Poll paper positions every 2 seconds
+  // Poll paper positions (fallback when WebSocket disconnected)
   const {
     data: positions = [],
     isLoading: isPositionsLoading,
@@ -101,7 +101,7 @@ export const useStrategyDetails = () => {
     enabled: queriesEnabled,
   });
 
-  // Poll paper orders every 2 seconds
+  // Poll paper orders (fallback when WebSocket disconnected)
   const {
     data: orders = [],
     isLoading: isOrdersLoading,

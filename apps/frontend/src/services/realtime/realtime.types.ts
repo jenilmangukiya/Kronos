@@ -10,6 +10,13 @@ export type StrategyDataChangedMessage = {
   ts: number;
 };
 
+export interface LiveTick {
+  token: string;
+  symbol?: string;
+  ltp: number;
+  timestamp?: string | number;
+}
+
 export type ServerRealtimeMessage =
   | { type: "pong"; ts: number }
   | { type: "error"; message: string }
@@ -17,4 +24,12 @@ export type ServerRealtimeMessage =
   | { type: "unsubscribed_strategy"; strategyId: string }
   | { type: "strategy_runtime_status"; strategyId: string; data: any }
   | { type: "strategy_runtime_status_error"; strategyId: string; message: string }
+  | {
+      type: "strategy_tick";
+      strategyId: string;
+      data: {
+        underlyingTick: LiveTick | null;
+        tradeTick: LiveTick | null;
+      };
+    }
   | StrategyDataChangedMessage;

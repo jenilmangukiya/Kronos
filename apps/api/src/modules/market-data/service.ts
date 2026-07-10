@@ -14,6 +14,7 @@ import type {
   QuoteQuery,
 } from "./types.js";
 import { AngelInstrumentProvider } from "./providers/angel-instrument.provider.js";
+import { candlesCache } from "./candles-cache.js";
 
 const angelInstrumentProvider = new AngelInstrumentProvider();
 
@@ -56,13 +57,36 @@ export class MarketDataService {
       query.brokerAccountId,
     );
 
-    const provider = new AngelMarketDataProvider();
+    const cached = candlesCache.get(
+      brokerAccount.id,
+      query.exchange,
+      query.symboltoken,
+      query.interval,
+      query.fromDate,
+      query.toDate,
+    );
+    if (cached) {
+      return cached;
+    }
 
-    return provider.getCandles({
+    const provider = new AngelMarketDataProvider();
+    const data = await provider.getCandles({
       apiKey: brokerAccount.apiKey!,
       accessToken: brokerAccount.accessToken!,
       query,
     });
+
+    candlesCache.set(
+      brokerAccount.id,
+      query.exchange,
+      query.symboltoken,
+      query.interval,
+      query.fromDate,
+      query.toDate,
+      data,
+    );
+
+    return data;
   }
 
   async searchInstruments(query: InstrumentSearchQuery) {

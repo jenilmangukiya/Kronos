@@ -32,6 +32,8 @@ export const useStrategyCandles = (
     },
     enabled: isEnabled && (options?.enabled ?? true),
     refetchInterval: 30000, // Poll every 30 seconds
+    refetchOnWindowFocus: false, // Avoid rate-limiting on tab switches
+    retry: 1, // Minimize retry spam on failure
     ...options,
   });
 };

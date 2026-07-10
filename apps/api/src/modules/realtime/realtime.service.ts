@@ -2,6 +2,7 @@ import { WebSocket } from "ws";
 import crypto from "crypto";
 import type { FastifyInstance } from "fastify";
 import { RealtimeClient, ServerRealtimeMessage } from "./realtime.types.js";
+import { liveTickStore } from "../market-data/live/live-tick.store.js";
 
 export class RealtimeService {
   private readonly clients = new Map<string, RealtimeClient>();
@@ -16,6 +17,7 @@ export class RealtimeService {
       subscribedStrategyIds: new Set<string>(),
       connectedAt: new Date(),
       lastSeenAt: new Date(),
+      lastSentTicks: new Map(),
     };
     this.clients.set(client.id, client);
     return client;
@@ -94,7 +96,8 @@ export class RealtimeService {
 
   startRuntimeStatusBroadcast(
     app: FastifyInstance,
-    getRuntimeStatus: (userId: string, strategyId: string) => Promise<unknown>
+    getRuntimeStatus: (userId: string, strategyId: string) => Promise<unknown>,
+    getStrategy: (userId: string, strategyId: string) => Promise<unknown>
   ): void {
     if (this.runtimeInterval) {
       return;
@@ -169,6 +172,76 @@ export class RealtimeService {
                 message: "Unable to load runtime status",
               });
             }
+          }
+
+          // Broadcast strategy live tick details
+          try {
+            const strategy = (await getStrategy(client.userId, strategyId)) as any;
+            if (strategy) {
+              const rules = (strategy.rules || {}) as any;
+              const trade = (strategy.trade || {}) as any;
+              const brokerAccountId = strategy.brokerAccountId;
+
+              const underlyingToken = rules.underlyingToken;
+              const tradeToken = trade.token;
+
+              const underlyingTickObj = (brokerAccountId && underlyingToken)
+                ? liveTickStore.getTick(brokerAccountId, underlyingToken)
+                : null;
+
+              const tradeTickObj = (brokerAccountId && tradeToken)
+                ? liveTickStore.getTick(brokerAccountId, tradeToken)
+                : null;
+
+              if (!client.lastSentTicks) {
+                client.lastSentTicks = new Map();
+              }
+              const lastSent = client.lastSentTicks.get(strategyId);
+
+              const currentUnderlyingLtp = underlyingTickObj?.ltp ?? null;
+              const currentTradeLtp = tradeTickObj?.ltp ?? null;
+              const currentUnderlyingTimestamp = underlyingTickObj?.exchangeTimestamp ?? null;
+              const currentTradeTimestamp = tradeTickObj?.exchangeTimestamp ?? null;
+
+              const priceChanged = !lastSent ||
+                lastSent.underlyingLtp !== currentUnderlyingLtp ||
+                lastSent.tradeLtp !== currentTradeLtp ||
+                lastSent.underlyingTimestamp !== currentUnderlyingTimestamp ||
+                lastSent.tradeTimestamp !== currentTradeTimestamp;
+
+              if (priceChanged) {
+                client.lastSentTicks.set(strategyId, {
+                  underlyingLtp: currentUnderlyingLtp,
+                  tradeLtp: currentTradeLtp,
+                  underlyingTimestamp: currentUnderlyingTimestamp,
+                  tradeTimestamp: currentTradeTimestamp,
+                });
+
+                this.send(client, {
+                  type: "strategy_tick",
+                  strategyId,
+                  data: {
+                    underlyingTick: underlyingTickObj ? {
+                      token: underlyingTickObj.token,
+                      symbol: strategy.symbol,
+                      ltp: underlyingTickObj.ltp,
+                      timestamp: underlyingTickObj.exchangeTimestamp,
+                    } : null,
+                    tradeTick: tradeTickObj ? {
+                      token: tradeTickObj.token,
+                      symbol: trade.symbol,
+                      ltp: tradeTickObj.ltp,
+                      timestamp: tradeTickObj.exchangeTimestamp,
+                    } : null,
+                  },
+                });
+              }
+            }
+          } catch (tickError) {
+            app.log.error(
+              { userId: client.userId, strategyId, error: tickError },
+              "Error during strategy tick broadcasting"
+            );
           }
         }
       }

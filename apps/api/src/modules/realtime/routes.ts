@@ -10,8 +10,10 @@ export async function realtimeRoutes(app: FastifyInstance) {
 
   // Register broadcaster
   const strategyService = new StrategyService(app, app.db);
-  realtimeService.startRuntimeStatusBroadcast(app, (userId, strategyId) =>
-    strategyService.getRuntimeStatus(userId, strategyId)
+  realtimeService.startRuntimeStatusBroadcast(
+    app,
+    (userId, strategyId) => strategyService.getRuntimeStatus(userId, strategyId),
+    (userId, strategyId) => strategyService.getById(userId, strategyId)
   );
 
   // Stop broadcaster on app close

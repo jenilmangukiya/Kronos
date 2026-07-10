@@ -97,6 +97,8 @@ export const StrategyDetails: React.FC = () => {
     realtimeConnected,
     isBackendOffline,
     handleRetry,
+    underlyingTick,
+    tradeTick,
   } = useStrategyDetails();
 
   const [isConfigExpanded, setIsConfigExpanded] = useState(false);
@@ -308,9 +310,11 @@ export const StrategyDetails: React.FC = () => {
   const markers = getMarkersFromOrders(candles, strategyOrders);
 
   // Live Price Calculation & Proximity Warning
-  const ltp = runtimeStatus?.liveTick
-    ? (runtimeStatus.liveTick.ltp ?? null)
-    : (livePriceData?.tick?.ltp ?? null);
+  const ltp = underlyingTick
+    ? (underlyingTick.ltp ?? null)
+    : (runtimeStatus?.liveTick
+      ? (runtimeStatus.liveTick.ltp ?? null)
+      : (livePriceData?.tick?.ltp ?? null));
   const triggerPrice = strategy.rules.triggerPrice;
   const ruleType = strategy.rules.type;
 
@@ -324,8 +328,11 @@ export const StrategyDetails: React.FC = () => {
       return { state: "Not Started", badgeVariant: "neutral" as const };
     }
 
-    if (realtimeConnected && runtimeStatus) {
-      if (runtimeStatus.liveTick?.ltp !== undefined && runtimeStatus.liveTick?.ltp !== null) {
+    if (realtimeConnected) {
+      if (underlyingTick?.ltp !== undefined && underlyingTick?.ltp !== null) {
+        return { state: "Live", badgeVariant: "success" as const };
+      }
+      if (runtimeStatus?.liveTick?.ltp !== undefined && runtimeStatus?.liveTick?.ltp !== null) {
         return { state: "Live", badgeVariant: "success" as const };
       }
       return { state: "No Tick Yet", badgeVariant: "warning" as const };
@@ -649,13 +656,14 @@ export const StrategyDetails: React.FC = () => {
               const latestTradeCandleClose = candles.length > 0 ? candles[candles.length - 1]?.close : null;
               const isUnderlyingSameAsTrade = strategy.rules?.underlyingToken === strategy.trade?.token;
               return (
+                tradeTick?.ltp ??
                 openPosition?.ltp ??
                 (openPosition as any)?.currentPrice ??
                 (openPosition as any)?.livePrice ??
                 runtimeStatus?.tradeTick?.ltp ??
                 latestTradeCandleClose ??
                 openPosition?.avgPrice ??
-                (isUnderlyingSameAsTrade ? (runtimeStatus?.liveTick?.ltp ?? livePriceData?.tick?.ltp ?? null) : null)
+                (isUnderlyingSameAsTrade ? (underlyingTick?.ltp ?? runtimeStatus?.liveTick?.ltp ?? livePriceData?.tick?.ltp ?? null) : null)
               );
             })()}
           />

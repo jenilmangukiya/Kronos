@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { realtimeClient } from "./realtimeClient";
-import { ServerRealtimeMessage, StrategyDataChangedMessage } from "./realtime.types";
+import { ServerRealtimeMessage, StrategyDataChangedMessage, LiveTick } from "./realtime.types";
 import { config } from "../../config";
 
 export interface UseStrategyRealtimeOptions {
@@ -12,6 +12,8 @@ export function useStrategyRealtime(
   options?: UseStrategyRealtimeOptions
 ) {
   const [runtimeStatus, setRuntimeStatus] = useState<any>(null);
+  const [underlyingTick, setUnderlyingTick] = useState<LiveTick | null>(null);
+  const [tradeTick, setTradeTick] = useState<LiveTick | null>(null);
   const [isConnected, setIsConnected] = useState(realtimeClient.isConnected());
   const [error, setError] = useState<string | null>(null);
 
@@ -33,6 +35,10 @@ export function useStrategyRealtime(
         setError(null);
       } else if (message.type === "strategy_runtime_status_error" && message.strategyId === strategyId) {
         setError(message.message);
+      } else if (message.type === "strategy_tick" && message.strategyId === strategyId) {
+        setUnderlyingTick(message.data.underlyingTick);
+        setTradeTick(message.data.tradeTick);
+        setError(null);
       } else if (message.type === "strategy_data_changed" && message.strategyId === strategyId) {
         if (config.isDev) {
           console.log("[Realtime] strategy_data_changed", message);
@@ -62,6 +68,8 @@ export function useStrategyRealtime(
 
   return {
     runtimeStatus,
+    underlyingTick,
+    tradeTick,
     isConnected,
     error,
   };

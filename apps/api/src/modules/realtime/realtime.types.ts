@@ -17,6 +17,24 @@ export type ServerRealtimeMessage =
       strategyId: string;
       scopes: Array<"logs" | "orders" | "positions" | "strategy" | "runtime">;
       ts: number;
+    }
+  | {
+      type: "strategy_tick";
+      strategyId: string;
+      data: {
+        underlyingTick: {
+          token: string;
+          symbol?: string;
+          ltp: number;
+          timestamp?: string | number;
+        } | null;
+        tradeTick: {
+          token: string;
+          symbol?: string;
+          ltp: number;
+          timestamp?: string | number;
+        } | null;
+      };
     };
 
 export interface RealtimeClient {
@@ -26,4 +44,13 @@ export interface RealtimeClient {
   subscribedStrategyIds: Set<string>;
   connectedAt: Date;
   lastSeenAt: Date;
+  lastSentTicks?: Map<
+    string,
+    {
+      underlyingLtp: number | null;
+      tradeLtp: number | null;
+      underlyingTimestamp?: string | number | null;
+      tradeTimestamp?: string | number | null;
+    }
+  >;
 }

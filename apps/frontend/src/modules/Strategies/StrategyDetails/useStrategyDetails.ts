@@ -287,6 +287,36 @@ export const useStrategyDetails = () => {
     }
   };
 
+  const underlyingTick = realtime.underlyingTick;
+  const tradeTick = realtime.tradeTick;
+
+  // Map positions to inject/override LTP from WebSocket tradeTick
+  const mappedPositions = positions.map((pos) => {
+    if (pos.strategyId !== id || pos.status !== "OPEN") {
+      return pos;
+    }
+
+    // Determine the live trade LTP from WebSocket or runtimeStatus
+    const liveLtp = tradeTick?.ltp ?? runtimeStatus?.tradeTick?.ltp ?? pos.ltp;
+
+    if (liveLtp === undefined || liveLtp === null) {
+      return pos;
+    }
+
+    // Calculate new PNL on the fly
+    const isLong = pos.side === "LONG";
+    const priceDiff = isLong ? (liveLtp - pos.avgPrice) : (pos.avgPrice - liveLtp);
+    const unrealizedPnl = priceDiff * pos.quantity;
+    const totalPnl = (pos.realizedPnl || 0) + unrealizedPnl;
+
+    return {
+      ...pos,
+      ltp: liveLtp,
+      unrealizedPnl,
+      totalPnl,
+    };
+  });
+
   const isLoading = isStrategyLoading;
   const error = strategyError
     ? ((strategyError as any).response?.data?.message || (strategyError as any).message)
@@ -298,7 +328,7 @@ export const useStrategyDetails = () => {
     id,
     strategy,
     logs,
-    positions,
+    positions: mappedPositions,
     orders,
     livePriceData,
     livePriceError,
@@ -333,5 +363,7 @@ export const useStrategyDetails = () => {
     realtimeConnected,
     isBackendOffline,
     handleRetry,
+    underlyingTick,
+    tradeTick,
   };
 };

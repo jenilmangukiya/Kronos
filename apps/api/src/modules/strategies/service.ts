@@ -169,6 +169,10 @@ export class StrategyService {
   async start(userId: string, strategyId: string) {
     const strategy = await this.getById(userId, strategyId);
 
+    if (strategy.status === "RUNNING") {
+      return strategy;
+    }
+
     if (strategy.mode === "LIVE") {
       throw new AppError(
         "Live strategy mode is not enabled",
@@ -247,7 +251,7 @@ export class StrategyService {
       },
     });
 
-    if (strategy.brokerAccountId) {
+    if (strategy.status === "RUNNING" && strategy.brokerAccountId) {
       const handler = strategyRegistry.get(strategy.strategyType);
       try {
         if (handler) {
@@ -310,7 +314,7 @@ export class StrategyService {
   async reset(userId: string, strategyId: string) {
     const strategy = await this.getById(userId, strategyId);
 
-    if (strategy.brokerAccountId) {
+    if (strategy.status === "RUNNING" && strategy.brokerAccountId) {
       const handler = strategyRegistry.get(strategy.strategyType);
       try {
         if (handler) {

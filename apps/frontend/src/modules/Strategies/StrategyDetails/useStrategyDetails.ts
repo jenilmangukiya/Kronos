@@ -63,8 +63,11 @@ export const useStrategyDetails = () => {
     },
   });
   const realtimeConnected = realtime.isConnected;
+  const isRunning = strategy?.status === "RUNNING";
+  const underlyingToken = strategy?.rules?.underlyingToken || "";
+  const brokerAccountId = strategy?.brokerAccountId || "";
 
-  const wsAdaptivePollInterval = realtimeConnected ? false : pollInterval;
+  const wsAdaptivePollInterval = realtimeConnected ? 15000 : pollInterval;
 
   // Poll logs every 2 seconds
   const {
@@ -76,13 +79,13 @@ export const useStrategyDetails = () => {
     enabled: Boolean(id) && queriesEnabled,
   });
 
-  // Poll runtime status every 1 second (REST fallback - only active when WS is disconnected)
+  // Poll runtime status every 1 second (REST fallback - only active when WS is disconnected and strategy is running)
   const {
     data: restRuntimeStatus,
     isLoading: isRuntimeStatusLoading,
     error: runtimeStatusError,
   } = useStrategyRuntimeStatus(id, {
-    refetchInterval: realtimeConnected ? false : fastPollInterval,
+    refetchInterval: (realtimeConnected || !isRunning) ? false : fastPollInterval,
     enabled: !realtimeConnected && queriesEnabled,
   });
 
@@ -107,11 +110,6 @@ export const useStrategyDetails = () => {
     refetchInterval: wsAdaptivePollInterval,
     enabled: queriesEnabled,
   });
-
-  // Poll live price every 1 second
-  const underlyingToken = strategy?.rules?.underlyingToken || "";
-  const brokerAccountId = strategy?.brokerAccountId || "";
-  const isRunning = strategy?.status === "RUNNING";
 
   const {
     data: livePriceData,

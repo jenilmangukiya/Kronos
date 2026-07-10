@@ -17,6 +17,45 @@ class LiveMarketDataService {
   private readonly sessions = new Map<string, LiveClientSession>();
 
   private readonly inactiveTimeoutMs = 30 * 60 * 1000;
+  private cleanupInterval: NodeJS.Timeout | null = null;
+
+  constructor() {
+    this.startCleanupInterval();
+  }
+
+  private startCleanupInterval() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupInactiveSessions();
+    }, 60 * 1000); // Check every minute
+    
+    // Unref the interval so it doesn't prevent Node from exiting
+    if (this.cleanupInterval && this.cleanupInterval.unref) {
+      this.cleanupInterval.unref();
+    }
+  }
+
+  stopCleanupInterval() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+  }
+
+  closeAll() {
+    for (const session of this.sessions.values()) {
+      try {
+        session.client.close();
+      } catch (err) {
+        // ignore
+      }
+    }
+    this.sessions.clear();
+    this.stopCleanupInterval();
+    liveTickStore.clear();
+  }
 
   async start(app: FastifyInstance, userId: string, brokerAccountId: string) {
     const existingSession = this.sessions.get(brokerAccountId);
@@ -330,4 +369,12 @@ class LiveMarketDataService {
   }
 }
 
-export const liveMarketDataService = new LiveMarketDataService();
+const globalForLiveMarket = globalThis as {
+  liveMarketDataService?: LiveMarketDataService;
+};
+
+export const liveMarketDataService = globalForLiveMarket.liveMarketDataService ?? new LiveMarketDataService();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForLiveMarket.liveMarketDataService = liveMarketDataService;
+}

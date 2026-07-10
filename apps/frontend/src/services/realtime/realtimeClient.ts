@@ -17,6 +17,8 @@ class RealtimeClient {
   private reconnectTimeout: any = null;
   private reconnectAttempts = 0;
   private readonly MAX_RECONNECT_ATTEMPTS = 5;
+  private lastToken: string | null = null;
+  private hasAuthError = false;
 
   connect() {
     if (this.socket || this.isConnecting) {
@@ -27,6 +29,18 @@ class RealtimeClient {
     const token = getAccessToken();
     if (!token) {
       console.warn("[RealtimeClient] No access token found for realtime WebSocket connection");
+      return;
+    }
+
+    // Reset auth error if token has changed
+    if (token !== this.lastToken) {
+      this.lastToken = token;
+      this.hasAuthError = false;
+      this.reconnectAttempts = 0;
+    }
+
+    if (this.hasAuthError) {
+      console.warn("[RealtimeClient] Connection skipped due to previous authentication error");
       return;
     }
 
@@ -63,6 +77,14 @@ class RealtimeClient {
         if (this.socket !== ws) return;
         try {
           const message: ServerRealtimeMessage = JSON.parse(event.data);
+          
+          if (message.type === "error" && message.message === "Unauthorized") {
+            console.warn("[RealtimeClient] Received Unauthorized error from server. Disabling reconnects.");
+            this.hasAuthError = true;
+            this.disconnect();
+            return;
+          }
+
           this.handlers.forEach((handler) => handler(message));
         } catch (error) {
           console.error("[RealtimeClient] Error parsing realtime WebSocket message:", error);
@@ -78,8 +100,8 @@ class RealtimeClient {
           console.log("WS disconnected");
         }
 
-        // Try to reconnect if we still have handlers (meaning components are still subscribed) and we haven't exceeded limit
-        if (this.handlers.size > 0 && this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
+        // Try to reconnect if we still have handlers (meaning components are still subscribed), we haven't exceeded limit, and there is no auth error
+        if (this.handlers.size > 0 && this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS && !this.hasAuthError) {
           this.reconnectAttempts++;
           console.log(`[RealtimeClient] Scheduling reconnect (attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS}) in 5 seconds...`);
           if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);

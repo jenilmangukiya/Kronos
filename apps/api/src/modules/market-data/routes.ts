@@ -32,6 +32,11 @@ export async function marketDataRoutes(app: FastifyInstance) {
   const marketDataService = new MarketDataService(app.db);
   const marketDataController = new MarketDataController(marketDataService);
 
+  app.addHook("onClose", async () => {
+    app.log.info("[Market Data] onClose hook triggered, closing all active WebSocket sessions");
+    liveMarketDataService.closeAll();
+  });
+
   typedApp.get(
     "/market-data/ltp",
     {

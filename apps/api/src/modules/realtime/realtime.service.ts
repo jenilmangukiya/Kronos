@@ -100,150 +100,173 @@ export class RealtimeService {
     getStrategy: (userId: string, strategyId: string) => Promise<unknown>
   ): void {
     if (this.runtimeInterval) {
-      return;
+      app.log.info("[Realtime] Clearing existing runtime status broadcaster interval before starting a new one");
+      clearInterval(this.runtimeInterval);
+      this.runtimeInterval = null;
     }
 
     app.log.info("[Realtime] Runtime broadcaster started");
 
     this.runtimeInterval = setInterval(async () => {
-      // If no clients or no subscribed strategies, skip work
-      if (this.clients.size === 0) {
-        return;
-      }
-      let hasSubscriptions = false;
-      for (const client of this.clients.values()) {
-        if (client.subscribedStrategyIds.size > 0) {
-          hasSubscriptions = true;
-          break;
+      try {
+        // If no clients or no subscribed strategies, skip work
+        if (this.clients.size === 0) {
+          return;
         }
-      }
-      if (!hasSubscriptions) {
-        return;
-      }
-
-      // Loop over all connected clients safely using entries
-      for (const [clientId, client] of Array.from(this.clients.entries())) {
-        if (client.socket.readyState !== WebSocket.OPEN) {
-          this.removeClient(clientId);
-          continue;
+        let hasSubscriptions = false;
+        for (const client of this.clients.values()) {
+          if (client.subscribedStrategyIds.size > 0) {
+            hasSubscriptions = true;
+            break;
+          }
+        }
+        if (!hasSubscriptions) {
+          return;
         }
 
-        // Loop over each client.subscribedStrategyIds
-        for (const strategyId of Array.from(client.subscribedStrategyIds)) {
-          try {
-            const runtimeStatus = await getRuntimeStatus(
-              client.userId,
-              strategyId
-            );
-            this.send(client, {
-              type: "strategy_runtime_status",
-              strategyId,
-              data: runtimeStatus,
-            });
-          } catch (error) {
-            const isP1001 = error && (
-              (error as any).code === "P1001" ||
-              (error as any).message?.includes("P1001") ||
-              (error as any).message?.includes("Can't reach database server")
-            );
+        // Loop over all connected clients safely using entries
+        for (const [clientId, client] of Array.from(this.clients.entries())) {
+          if (client.socket.readyState !== WebSocket.OPEN) {
+            this.removeClient(clientId);
+            continue;
+          }
 
-            if (isP1001) {
-              const now = Date.now();
-              if (now - this.lastP1001LoggedAt > 60000) {
-                this.lastP1001LoggedAt = now;
-                app.log.error(
-                  { userId: client.userId, strategyId, errorCode: "P1001" },
-                  "Database connection error (P1001) during strategy runtime status broadcast (throttled)"
-                );
-              }
-              this.send(client, {
-                type: "strategy_runtime_status_error",
-                strategyId,
-                message: "Database connection failed. Please check if database is running.",
-              });
-            } else {
-              app.log.error(
-                { userId: client.userId, strategyId, error },
-                "Error loading strategy runtime status for realtime stream"
+          // Loop over each client.subscribedStrategyIds
+          for (const strategyId of Array.from(client.subscribedStrategyIds)) {
+            try {
+              const runtimeStatus = await getRuntimeStatus(
+                client.userId,
+                strategyId
               );
               this.send(client, {
-                type: "strategy_runtime_status_error",
+                type: "strategy_runtime_status",
                 strategyId,
-                message: "Unable to load runtime status",
+                data: runtimeStatus,
               });
-            }
-          }
+            } catch (error) {
+              const isP1001 = error && (
+                (error as any).code === "P1001" ||
+                (error as any).message?.includes("P1001") ||
+                (error as any).message?.includes("Can't reach database server")
+              );
 
-          // Broadcast strategy live tick details
-          try {
-            const strategy = (await getStrategy(client.userId, strategyId)) as any;
-            if (strategy) {
-              const rules = (strategy.rules || {}) as any;
-              const trade = (strategy.trade || {}) as any;
-              const brokerAccountId = strategy.brokerAccountId;
-
-              const underlyingToken = rules.underlyingToken;
-              const tradeToken = trade.token;
-
-              const underlyingTickObj = (brokerAccountId && underlyingToken)
-                ? liveTickStore.getTick(brokerAccountId, underlyingToken)
-                : null;
-
-              const tradeTickObj = (brokerAccountId && tradeToken)
-                ? liveTickStore.getTick(brokerAccountId, tradeToken)
-                : null;
-
-              if (!client.lastSentTicks) {
-                client.lastSentTicks = new Map();
-              }
-              const lastSent = client.lastSentTicks.get(strategyId);
-
-              const currentUnderlyingLtp = underlyingTickObj?.ltp ?? null;
-              const currentTradeLtp = tradeTickObj?.ltp ?? null;
-              const currentUnderlyingTimestamp = underlyingTickObj?.exchangeTimestamp ?? null;
-              const currentTradeTimestamp = tradeTickObj?.exchangeTimestamp ?? null;
-
-              const priceChanged = !lastSent ||
-                lastSent.underlyingLtp !== currentUnderlyingLtp ||
-                lastSent.tradeLtp !== currentTradeLtp ||
-                lastSent.underlyingTimestamp !== currentUnderlyingTimestamp ||
-                lastSent.tradeTimestamp !== currentTradeTimestamp;
-
-              if (priceChanged) {
-                client.lastSentTicks.set(strategyId, {
-                  underlyingLtp: currentUnderlyingLtp,
-                  tradeLtp: currentTradeLtp,
-                  underlyingTimestamp: currentUnderlyingTimestamp,
-                  tradeTimestamp: currentTradeTimestamp,
-                });
-
+              if (isP1001) {
+                const now = Date.now();
+                if (now - this.lastP1001LoggedAt > 60000) {
+                  this.lastP1001LoggedAt = now;
+                  app.log.error(
+                    { userId: client.userId, strategyId, errorCode: "P1001" },
+                    "Database connection error (P1001) during strategy runtime status broadcast (throttled)"
+                  );
+                }
                 this.send(client, {
-                  type: "strategy_tick",
+                  type: "strategy_runtime_status_error",
                   strategyId,
-                  data: {
-                    underlyingTick: underlyingTickObj ? {
-                      token: underlyingTickObj.token,
-                      symbol: strategy.symbol,
-                      ltp: underlyingTickObj.ltp,
-                      timestamp: underlyingTickObj.exchangeTimestamp,
-                    } : null,
-                    tradeTick: tradeTickObj ? {
-                      token: tradeTickObj.token,
-                      symbol: trade.symbol,
-                      ltp: tradeTickObj.ltp,
-                      timestamp: tradeTickObj.exchangeTimestamp,
-                    } : null,
-                  },
+                  message: "Database connection failed. Please check if database is running.",
+                });
+              } else {
+                app.log.error(
+                  { userId: client.userId, strategyId, error },
+                  "Error loading strategy runtime status for realtime stream"
+                );
+                this.send(client, {
+                  type: "strategy_runtime_status_error",
+                  strategyId,
+                  message: "Unable to load runtime status",
                 });
               }
             }
-          } catch (tickError) {
-            app.log.error(
-              { userId: client.userId, strategyId, error: tickError },
-              "Error during strategy tick broadcasting"
-            );
+
+            // Broadcast strategy live tick details
+            try {
+              const strategy = (await getStrategy(client.userId, strategyId)) as any;
+              if (strategy) {
+                const rules = (strategy.rules || {}) as any;
+                const trade = (strategy.trade || {}) as any;
+                const brokerAccountId = strategy.brokerAccountId;
+
+                const underlyingToken = rules.underlyingToken;
+                const tradeToken = trade.token;
+
+                const underlyingTickObj = (brokerAccountId && underlyingToken)
+                  ? liveTickStore.getTick(brokerAccountId, underlyingToken)
+                  : null;
+
+                const tradeTickObj = (brokerAccountId && tradeToken)
+                  ? liveTickStore.getTick(brokerAccountId, tradeToken)
+                  : null;
+
+                if (!client.lastSentTicks) {
+                  client.lastSentTicks = new Map();
+                }
+                const lastSent = client.lastSentTicks.get(strategyId);
+
+                const currentUnderlyingLtp = underlyingTickObj?.ltp ?? null;
+                const currentTradeLtp = tradeTickObj?.ltp ?? null;
+                const currentUnderlyingTimestamp = underlyingTickObj?.exchangeTimestamp ?? null;
+                const currentTradeTimestamp = tradeTickObj?.exchangeTimestamp ?? null;
+
+                const priceChanged = !lastSent ||
+                  lastSent.underlyingLtp !== currentUnderlyingLtp ||
+                  lastSent.tradeLtp !== currentTradeLtp ||
+                  lastSent.underlyingTimestamp !== currentUnderlyingTimestamp ||
+                  lastSent.tradeTimestamp !== currentTradeTimestamp;
+
+                if (priceChanged) {
+                  client.lastSentTicks.set(strategyId, {
+                    underlyingLtp: currentUnderlyingLtp,
+                    tradeLtp: currentTradeLtp,
+                    underlyingTimestamp: currentUnderlyingTimestamp,
+                    tradeTimestamp: currentTradeTimestamp,
+                  });
+
+                  this.send(client, {
+                    type: "strategy_tick",
+                    strategyId,
+                    data: {
+                      underlyingTick: underlyingTickObj ? {
+                        token: underlyingTickObj.token,
+                        symbol: strategy.symbol,
+                        ltp: underlyingTickObj.ltp,
+                        timestamp: underlyingTickObj.exchangeTimestamp,
+                      } : null,
+                      tradeTick: tradeTickObj ? {
+                        token: tradeTickObj.token,
+                        symbol: trade.symbol,
+                        ltp: tradeTickObj.ltp,
+                        timestamp: tradeTickObj.exchangeTimestamp,
+                      } : null,
+                    },
+                  });
+                }
+              }
+            } catch (tickError) {
+              const isP1001 = tickError && (
+                (tickError as any).code === "P1001" ||
+                (tickError as any).message?.includes("P1001") ||
+                (tickError as any).message?.includes("Can't reach database server")
+              );
+
+              if (isP1001) {
+                const now = Date.now();
+                if (now - this.lastP1001LoggedAt > 60000) {
+                  this.lastP1001LoggedAt = now;
+                  app.log.error(
+                    { userId: client.userId, strategyId, errorCode: "P1001" },
+                    "Database connection error (P1001) during strategy tick broadcast (throttled)"
+                  );
+                }
+              } else {
+                app.log.error(
+                  { userId: client.userId, strategyId, error: tickError },
+                  "Error during strategy tick broadcasting"
+                );
+              }
+            }
           }
         }
+      } catch (globalError) {
+        app.log.error({ error: globalError }, "Error inside runtime status broadcast interval");
       }
     }, 1000);
   }

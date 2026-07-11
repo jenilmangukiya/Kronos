@@ -426,10 +426,64 @@ export const StrategyDetails: React.FC = () => {
         </div>
       )}
 
-      {/* Main Monitor Grid (2-column layout on desktop) */}
-      <div className="flex flex-col lg:flex-row gap-6 items-stretch">
-        {/* Left Control Column (350px width) */}
-        <div className="w-full lg:w-[350px] shrink-0 flex flex-col gap-4">
+      {/* Main Monitor Grid (Chart at the top, Controls at the bottom) */}
+      <div className="flex flex-col gap-6">
+        {/* Top Chart Row */}
+        <div className="w-full">
+          <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <LineChart className="h-4.5 w-4.5 text-indigo-400" />
+                  {strategy.trade?.symbol || "Strategy"} 5m Candles
+                </h3>
+                <p className="text-slate-500 text-[10px] mt-0.5">
+                  Refreshing every 30 seconds
+                </p>
+              </div>
+              {isCandlesFetching && (
+                <span className="flex items-center gap-1.5 text-[9px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 font-semibold uppercase tracking-wider">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-ping" />
+                  Updating
+                </span>
+              )}
+            </div>
+
+            <div className="flex-grow flex flex-col justify-center min-h-[300px]">
+              {!strategy.trade?.token ? (
+                <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
+                  <AlertCircle className="h-8 w-8 text-slate-500" />
+                  <span>Select a trade instrument to view candles</span>
+                </div>
+              ) : !strategy.brokerAccountId ? (
+                <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
+                  <AlertCircle className="h-8 w-8 text-slate-500" />
+                  <span>Connect broker account to view candles</span>
+                </div>
+              ) : candlesError && !(isCandlesLoading || (isCandlesFetching && candles.length === 0)) ? (
+                <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-rose-400 text-xs space-y-2">
+                  <AlertCircle className="h-8 w-8 text-rose-500/80" />
+                  <span>Unable to load candle data</span>
+                  <span className="text-[10px] text-slate-500 mt-1 max-w-xs text-center truncate px-4">
+                    {candlesError?.message || String(candlesError)}
+                  </span>
+                </div>
+              ) : (
+                <CandleChart
+                  candles={candles}
+                  isLoading={isCandlesLoading || (isCandlesFetching && candles.length === 0)}
+                  height={chartHeight}
+                  emptyMessage="No candle data available yet"
+                  markers={markers}
+                  priceLines={priceLines}
+                />
+              )}
+            </div>
+          </Card>
+        </div>
+
+        {/* Bottom Controls Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
           {/* Live Price Card */}
           <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col justify-between">
             <div>
@@ -603,60 +657,6 @@ export const StrategyDetails: React.FC = () => {
             currentPrice={tradeCurrentPrice}
           />
         </div>
-
-        {/* Right Large Chart Column */}
-        <div className="flex-grow flex flex-col min-w-0">
-          <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col h-full flex-grow">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                  <LineChart className="h-4.5 w-4.5 text-indigo-400" />
-                  {strategy.trade?.symbol || "Strategy"} 5m Candles
-                </h3>
-                <p className="text-slate-500 text-[10px] mt-0.5">
-                  Refreshing every 30 seconds
-                </p>
-              </div>
-              {isCandlesFetching && (
-                <span className="flex items-center gap-1.5 text-[9px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 font-semibold uppercase tracking-wider">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-ping" />
-                  Updating
-                </span>
-              )}
-            </div>
-
-            <div className="flex-grow flex flex-col justify-center min-h-[300px]">
-              {!strategy.trade?.token ? (
-                <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
-                  <AlertCircle className="h-8 w-8 text-slate-500" />
-                  <span>Select a trade instrument to view candles</span>
-                </div>
-              ) : !strategy.brokerAccountId ? (
-                <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
-                  <AlertCircle className="h-8 w-8 text-slate-500" />
-                  <span>Connect broker account to view candles</span>
-                </div>
-              ) : candlesError && !(isCandlesLoading || (isCandlesFetching && candles.length === 0)) ? (
-                <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-rose-400 text-xs space-y-2">
-                  <AlertCircle className="h-8 w-8 text-rose-500/80" />
-                  <span>Unable to load candle data</span>
-                  <span className="text-[10px] text-slate-500 mt-1 max-w-xs text-center truncate px-4">
-                    {candlesError?.message || String(candlesError)}
-                  </span>
-                </div>
-              ) : (
-                <CandleChart
-                  candles={candles}
-                  isLoading={isCandlesLoading || (isCandlesFetching && candles.length === 0)}
-                  height={chartHeight}
-                  emptyMessage="No candle data available yet"
-                  markers={markers}
-                  priceLines={priceLines}
-                />
-              )}
-            </div>
-          </Card>
-        </div>
       </div>
 
       {/* Position Section */}
@@ -686,8 +686,8 @@ export const StrategyDetails: React.FC = () => {
             const unPnl = pos.unrealizedPnl;
             const totPnl = pos.totalPnl;
             return (
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 items-center font-mono text-xs">
-                <div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-4 items-center font-mono text-xs">
+                <div className="col-span-2">
                   <span className="text-slate-500 block text-[9px] uppercase font-semibold">Symbol</span>
                   <span className="text-slate-200 font-bold text-sm block mt-0.5">{pos.symbol}</span>
                 </div>

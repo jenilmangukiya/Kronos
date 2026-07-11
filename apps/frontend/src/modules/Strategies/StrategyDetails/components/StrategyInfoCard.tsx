@@ -46,7 +46,7 @@ export const StrategyInfoCard: React.FC<StrategyInfoCardProps> = ({ strategy }) 
           <Badge variant={isRunning ? "success" : "neutral"}>{strategy.status}</Badge>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2 gap-4 text-sm">
           <div>
             <span className="text-slate-400 block text-xs uppercase tracking-wider font-semibold">Name</span>
             <span className="text-slate-200 font-bold text-base mt-1 block">{strategy.name}</span>
@@ -67,7 +67,7 @@ export const StrategyInfoCard: React.FC<StrategyInfoCardProps> = ({ strategy }) 
               {strategy.mode}
             </Badge>
           </div>
-          <div className="col-span-2 border-t border-slate-800/60 pt-4 grid grid-cols-2 gap-4">
+          <div className="col-span-1 sm:col-span-2 md:col-span-1 lg:col-span-2 border-t border-slate-800/60 pt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2 gap-4">
             <div>
               <span className="text-slate-400 block text-xs uppercase tracking-wider font-semibold flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5" />
@@ -102,7 +102,7 @@ export const StrategyInfoCard: React.FC<StrategyInfoCardProps> = ({ strategy }) 
             <TrendingUp className="h-4.5 w-4.5 text-indigo-400" />
             Trade Execution Action
           </h4>
-          <div className="grid grid-cols-2 gap-3 text-xs border-t border-slate-800/60 pt-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2 gap-3 text-xs border-t border-slate-800/60 pt-3">
             <div>
               <span className="text-slate-400 block font-medium">Action / Side</span>
               <Badge
@@ -123,7 +123,7 @@ export const StrategyInfoCard: React.FC<StrategyInfoCardProps> = ({ strategy }) 
                 )}
               </span>
             </div>
-            <div className="col-span-2">
+            <div className="col-span-1 sm:col-span-2 md:col-span-1 lg:col-span-2">
               <span className="text-slate-400 block font-medium">Execution Asset Symbol</span>
               <span className="text-indigo-400 font-mono text-[11px] font-semibold mt-0.5 block truncate" title={strategy.trade.symbol}>
                 {strategy.trade.symbol}
@@ -148,7 +148,7 @@ export const StrategyInfoCard: React.FC<StrategyInfoCardProps> = ({ strategy }) 
             <Shield className="h-4.5 w-4.5 text-emerald-400" />
             Risk Profile
           </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs border-t border-slate-800/60 pt-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs border-t border-slate-800/60 pt-3">
             <div>
               <span className="text-slate-400 block font-medium">Max Trades/Day</span>
               <span className="text-slate-200 font-semibold mt-0.5 block">

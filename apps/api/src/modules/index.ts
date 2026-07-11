@@ -8,6 +8,7 @@ import { marketDataRoutes } from "./market-data/routes.js";
 import { paperTradingRoutes } from "./paper-trading/routes.js";
 import { strategyRoutes } from "./strategies/routes.js";
 import { realtimeRoutes } from "./realtime/routes.js";
+import { replayRoutes } from "./market-replay/replay.controller.js";
 import { StrategyRunnerService } from "./strategies/runner/strategy-runner.service.js";
 
 export async function registerModules(app: FastifyInstance) {
@@ -35,6 +36,9 @@ export async function registerModules(app: FastifyInstance) {
   // Realtime
   await app.register(realtimeRoutes);
 
+  // Market Replay
+  await app.register(replayRoutes);
+
   const strategyRunnerService = new StrategyRunnerService(app);
 
   strategyRunnerService.start();
@@ -43,3 +47,4 @@ export async function registerModules(app: FastifyInstance) {
     strategyRunnerService.stop();
   });
 }
+

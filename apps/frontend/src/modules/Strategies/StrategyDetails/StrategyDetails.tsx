@@ -16,6 +16,7 @@ import { StrategyActions } from "./components/StrategyActions";
 import { StrategyLogs } from "./components/StrategyLogs";
 import { StrategyJsonPreview } from "./components/StrategyJsonPreview";
 import { ExitPlanCard } from "./components/ExitPlanCard";
+import { ReplayDevPanel } from "./components/ReplayDevPanel";
 import { Spinner } from "../../../components/ui/Spinner";
 import { Card } from "../../../components/ui/Card";
 import { Badge } from "../../../components/ui/Badge";
@@ -658,6 +659,15 @@ export const StrategyDetails: React.FC = () => {
           />
         </div>
       </div>
+
+      {/* Replay Dev Panel (Dev-only) */}
+      {import.meta.env.DEV === true && (
+        <ReplayDevPanel
+          strategyId={strategy.id}
+          brokerAccountId={strategy.brokerAccountId || ""}
+          symbol={strategy.symbol}
+        />
+      )}
 
       {/* Position Section */}
       <Card className="border-slate-800 bg-slate-950 p-4">

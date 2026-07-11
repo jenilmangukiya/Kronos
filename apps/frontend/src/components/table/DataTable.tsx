@@ -14,8 +14,10 @@ import { Spinner } from "../ui/Spinner";
 import { DataTableProps } from "./types";
 
 declare module "@tanstack/react-table" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface ColumnMeta<TData extends RowData, TValue> {
     align?: "left" | "center" | "right";
+    className?: string;
   }
 }
 
@@ -65,7 +67,7 @@ export function DataTable<TData, TValue>({
                         : align === "center"
                         ? "text-center"
                         : "text-left"
-                    }`}
+                    } ${header.column.columnDef.meta?.className || ""}`}
                     onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
                   >
                     <div
@@ -140,7 +142,7 @@ export function DataTable<TData, TValue>({
                           : align === "center"
                           ? "text-center"
                           : "text-left"
-                      }`}
+                      } ${cell.column.columnDef.meta?.className || ""}`}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>

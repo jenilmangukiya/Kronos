@@ -31,7 +31,7 @@ const formatTradeDetails = (strategy: Strategy) => {
         </Badge>
         <span className="font-semibold text-slate-200">{quantity} units</span>
       </div>
-      <span className="text-slate-400 mt-0.5 truncate max-w-[150px]" title={symbol}>
+      <span className="text-slate-400 mt-0.5 truncate max-w-[200px]" title={symbol}>
         {symbol}
       </span>
     </div>
@@ -91,13 +91,13 @@ export const getStrategyColumns = (
   {
     id: "triggerRule",
     header: "Trigger Rule",
-    meta: { align: "left" },
+    meta: { align: "left", className: "min-w-[150px]" },
     cell: ({ row }) => formatTriggerRule(row.original),
   },
   {
     id: "tradeDetails",
     header: "Trade Details",
-    meta: { align: "left" },
+    meta: { align: "left", className: "min-w-[220px]" },
     cell: ({ row }) => formatTradeDetails(row.original),
   },
   {

@@ -3,7 +3,6 @@ import {
   getIndiaMarketFromDate,
   getIndiaMarketToDate,
   convertCandleTimeToChartTime,
-  formatISTDateTime,
 } from "../../utils/date/marketTime";
 
 export interface Candle {
@@ -49,15 +48,6 @@ export const getStrategyCandles = async (params: StrategyCandleParams): Promise<
   const toDate = getIndiaMarketToDate();
   const interval = params.interval || "FIVE_MINUTE";
 
-  // Task 2: Log request parameters
-  console.log("[Candle Service Query] Fetching candles with params:", {
-    brokerAccountId: params.brokerAccountId,
-    exchange: params.exchange,
-    symboltoken: params.symboltoken,
-    interval,
-    fromDate,
-    toDate,
-  });
 
   const response = await getCandles({
     brokerAccountId: params.brokerAccountId,
@@ -73,25 +63,7 @@ export const getStrategyCandles = async (params: StrategyCandleParams): Promise<
     return [];
   }
 
-  // Task 2: Log payload stats
-  const totalLength = response.data.length;
-  console.log("[Candle Service Query] Response payload length:", totalLength);
 
-  if (totalLength > 0 && response.data) {
-    const firstRow = response.data[0];
-    const lastRow = response.data[totalLength - 1];
-    if (firstRow && lastRow) {
-      const rawFirstTime = firstRow[0];
-      const rawLastTime = lastRow[0];
-      console.log("[Candle Service Query] First raw timestamp:", rawFirstTime);
-      console.log("[Candle Service Query] Last raw timestamp:", rawLastTime);
-
-      const firstChartTime = convertCandleTimeToChartTime(rawFirstTime);
-      const lastChartTime = convertCandleTimeToChartTime(rawLastTime);
-      console.log("[Candle Service Query] Converted first chart time:", firstChartTime, "-> Formatted IST:", formatISTDateTime(firstChartTime));
-      console.log("[Candle Service Query] Converted last chart time:", lastChartTime, "-> Formatted IST:", formatISTDateTime(lastChartTime));
-    }
-  }
 
   return response.data.map((item: [string, number, number, number, number, number]) => {
     const chartTime = convertCandleTimeToChartTime(item[0]);

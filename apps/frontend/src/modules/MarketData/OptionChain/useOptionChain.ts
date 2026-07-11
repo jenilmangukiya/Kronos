@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useBrokerAccounts } from "../../../services/broker/BrokerQueries";
 import {
   useOptionExpiries,
@@ -8,10 +8,10 @@ import {
   useStopLiveWebSocket,
   useSubscribeLiveTokens,
 } from "../../../services/market-data/MarketDataQueries";
-import { getLatestManyTicks, OptionChainRow } from "../../../services/market-data/MarketDataService";
+import { getLatestManyTicks } from "../../../services/market-data/MarketDataService";
 
 export const useOptionChain = () => {
-  const queryClient = useQueryClient();
+
   const { data: accounts, isLoading: isLoadingAccounts } = useBrokerAccounts();
 
   const activeAccount = useMemo(() => {
@@ -116,6 +116,7 @@ export const useOptionChain = () => {
         stopWs.mutate(brokerAccountId);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brokerAccountId, symbol, expiry, strikeRange, tokensList]);
 
   const [consecutiveErrors, setConsecutiveErrors] = useState(0);

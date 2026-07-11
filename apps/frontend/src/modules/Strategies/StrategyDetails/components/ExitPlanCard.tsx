@@ -5,7 +5,7 @@ import { Card } from "../../../../components/ui/Card";
 import { Badge } from "../../../../components/ui/Badge";
 import { formatCurrency, formatPercent } from "../../../../utils/format";
 import { getExitPlan } from "../../utils/exitPlan";
-import { Compass, Target, ShieldAlert, Activity, ArrowRightLeft, Info } from "lucide-react";
+import { Compass, Target, ShieldAlert, Activity, ArrowRightLeft } from "lucide-react";
 
 interface ExitPlanCardProps {
   position?: PaperPosition | null;

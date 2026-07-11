@@ -23,9 +23,8 @@ export const useStrategyDetails = () => {
   const queryClient = useQueryClient();
 
   const [isBackendOffline, setIsBackendOffline] = useState(false);
-  const [consecutiveFailures, setConsecutiveFailures] = useState(0);
+  const [, setConsecutiveFailures] = useState(0);
 
-  const pollInterval = isBackendOffline ? false : 2000;
   const fastPollInterval = isBackendOffline ? false : 1000;
   const queriesEnabled = !isBackendOffline;
 
@@ -72,7 +71,6 @@ export const useStrategyDetails = () => {
   // Poll logs (fallback when WebSocket disconnected)
   const {
     data: logs = [],
-    isLoading: isLogsLoading,
     error: logsError,
   } = useGetStrategyLogs(id, {
     refetchInterval: wsAdaptivePollInterval,
@@ -82,7 +80,6 @@ export const useStrategyDetails = () => {
   // Poll runtime status every 1 second (REST fallback - only active when WS is disconnected and strategy is running)
   const {
     data: restRuntimeStatus,
-    isLoading: isRuntimeStatusLoading,
     error: runtimeStatusError,
   } = useStrategyRuntimeStatus(id, {
     refetchInterval: (realtimeConnected || !isRunning) ? false : fastPollInterval,
@@ -113,7 +110,6 @@ export const useStrategyDetails = () => {
 
   const {
     data: livePriceData,
-    isLoading: isLivePriceLoading,
     error: livePriceError,
   } = useLiveLatestTick(brokerAccountId, underlyingToken, {
     refetchInterval: fastPollInterval,
@@ -288,14 +284,36 @@ export const useStrategyDetails = () => {
   const underlyingTick = realtime.underlyingTick;
   const tradeTick = realtime.tradeTick;
 
-  // Map positions to inject/override LTP from WebSocket tradeTick
+  const watchCurrentPrice =
+    underlyingTick?.ltp ??
+    runtimeStatus?.liveTick?.ltp ??
+    livePriceData?.tick?.ltp ??
+    null;
+
+  const openPosition = positions.find((pos) => pos.strategyId === id && pos.status === "OPEN");
+  const latestTradeCandleClose = candles.length > 0 ? candles[candles.length - 1]?.close : null;
+  const isUnderlyingSameAsTrade = strategy?.rules?.underlyingToken === strategy?.trade?.token;
+
+  const tradeCurrentPrice =
+    tradeTick?.ltp ??
+    openPosition?.ltp ??
+    (openPosition as any)?.currentPrice ??
+    (openPosition as any)?.livePrice ??
+    runtimeStatus?.tradeTick?.ltp ??
+    latestTradeCandleClose ??
+    openPosition?.avgPrice ??
+    (isUnderlyingSameAsTrade ? watchCurrentPrice : null);
+
+  const displayUnderlyingTick = underlyingTick || (watchCurrentPrice !== null ? { ltp: watchCurrentPrice } as any : null);
+  const displayTradeTick = tradeTick || (tradeCurrentPrice !== null ? { ltp: tradeCurrentPrice } as any : null);
+
+  // Map positions to inject/override LTP from WebSocket tradeTick or other fallbacks
   const mappedPositions = positions.map((pos) => {
     if (pos.strategyId !== id || pos.status !== "OPEN") {
       return pos;
     }
 
-    // Determine the live trade LTP from WebSocket or runtimeStatus
-    const liveLtp = tradeTick?.ltp ?? runtimeStatus?.tradeTick?.ltp ?? pos.ltp;
+    const liveLtp = tradeCurrentPrice ?? pos.ltp;
 
     if (liveLtp === undefined || liveLtp === null) {
       return pos;
@@ -331,10 +349,7 @@ export const useStrategyDetails = () => {
     livePriceData,
     livePriceError,
     isLoading: isLoading || isPositionsLoading || isOrdersLoading,
-    isLogsLoading,
-    isLivePriceLoading,
     runtimeStatus,
-    isRuntimeStatusLoading,
     error: error || (runtimeStatusError ? ((runtimeStatusError as any).response?.data?.message || (runtimeStatusError as any).message) : null) || realtime.error,
     actionError,
     setActionError,
@@ -361,7 +376,9 @@ export const useStrategyDetails = () => {
     realtimeConnected,
     isBackendOffline,
     handleRetry,
-    underlyingTick,
-    tradeTick,
+    watchCurrentPrice,
+    tradeCurrentPrice,
+    displayUnderlyingTick,
+    displayTradeTick,
   };
 };

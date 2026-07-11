@@ -30,43 +30,6 @@ import {
 } from "./helpers";
 import { getStrategyTypeConfig } from "../strategyTypes";
 
-const getStatusBadgeProps = (reason: string, canEnter: boolean) => {
-  if (canEnter) {
-    return {
-      variant: "success" as const,
-      text: "Can Enter",
-      tooltip: "Checks passed: The strategy is active and ready to execute entry orders when conditions match."
-    };
-  }
-  const r = reason.toLowerCase();
-  if (r.includes("stopped")) {
-    return {
-      variant: "neutral" as const,
-      text: "Stopped",
-      tooltip: "The strategy is currently stopped and will not perform checks or entries."
-    };
-  }
-  if (r.includes("waiting") || r.includes("condition")) {
-    return {
-      variant: "warning" as const,
-      text: "Waiting",
-      tooltip: "The strategy is actively monitoring condition rules to match."
-    };
-  }
-  if (r.includes("blocked") || r.includes("max trades") || r.includes("exists") || r.includes("unsupported")) {
-    return {
-      variant: "danger" as const,
-      text: "Blocked",
-      tooltip: "Entry blocked: The strategy cannot enter new positions right now (e.g. because an open position is active or the daily trade limit is reached)."
-    };
-  }
-  return {
-    variant: "neutral" as const,
-    text: "Blocked",
-    tooltip: "Entry blocked. Refer to the 'Reason' field below."
-  };
-};
-
 export const StrategyDetails: React.FC = () => {
   const {
     strategy,
@@ -97,8 +60,9 @@ export const StrategyDetails: React.FC = () => {
     realtimeConnected,
     isBackendOffline,
     handleRetry,
-    underlyingTick,
-    tradeTick,
+    watchCurrentPrice,
+    tradeCurrentPrice,
+    displayUnderlyingTick,
   } = useStrategyDetails();
 
   const [isConfigExpanded, setIsConfigExpanded] = useState(false);
@@ -137,18 +101,6 @@ export const StrategyDetails: React.FC = () => {
 
   const isRunning = strategy.status === "RUNNING";
 
-  // Calculate Trades Today
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const tradesToday = orders.filter(
-    (order) =>
-      order.strategyId === strategy.id &&
-      order.side === strategy.trade.side &&
-      new Date(order.createdAt) >= startOfDay
-  ).length;
-
-  const maxTradesPerDay = strategy.risk?.maxTradesPerDay ?? 1;
-  const tradesLimitReached = tradesToday >= maxTradesPerDay;
 
   // Filter Positions strictly by strategyId and OPEN status
   const openPositions = positions.filter(
@@ -310,11 +262,7 @@ export const StrategyDetails: React.FC = () => {
   const markers = getMarkersFromOrders(candles, strategyOrders);
 
   // Live Price Calculation & Proximity Warning
-  const ltp = underlyingTick
-    ? (underlyingTick.ltp ?? null)
-    : (runtimeStatus?.liveTick
-      ? (runtimeStatus.liveTick.ltp ?? null)
-      : (livePriceData?.tick?.ltp ?? null));
+  const ltp = watchCurrentPrice;
   const triggerPrice = strategy.rules.triggerPrice;
   const ruleType = strategy.rules.type;
 
@@ -329,7 +277,7 @@ export const StrategyDetails: React.FC = () => {
     }
 
     if (realtimeConnected) {
-      if (underlyingTick?.ltp !== undefined && underlyingTick?.ltp !== null) {
+      if (displayUnderlyingTick?.ltp !== undefined && displayUnderlyingTick?.ltp !== null) {
         return { state: "Live", badgeVariant: "success" as const };
       }
       if (runtimeStatus?.liveTick?.ltp !== undefined && runtimeStatus?.liveTick?.ltp !== null) {
@@ -652,20 +600,7 @@ export const StrategyDetails: React.FC = () => {
           <ExitPlanCard
             position={openPosition}
             risk={strategy.risk}
-            currentPrice={(() => {
-              const latestTradeCandleClose = candles.length > 0 ? candles[candles.length - 1]?.close : null;
-              const isUnderlyingSameAsTrade = strategy.rules?.underlyingToken === strategy.trade?.token;
-              return (
-                tradeTick?.ltp ??
-                openPosition?.ltp ??
-                (openPosition as any)?.currentPrice ??
-                (openPosition as any)?.livePrice ??
-                runtimeStatus?.tradeTick?.ltp ??
-                latestTradeCandleClose ??
-                openPosition?.avgPrice ??
-                (isUnderlyingSameAsTrade ? (underlyingTick?.ltp ?? runtimeStatus?.liveTick?.ltp ?? livePriceData?.tick?.ltp ?? null) : null)
-              );
-            })()}
+            currentPrice={tradeCurrentPrice}
           />
         </div>
 

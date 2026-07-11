@@ -52,7 +52,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     if (!container) return;
 
     const initialWidth = container.clientWidth || 600;
-    console.log("[CandleChart] Initializing chart with container clientWidth:", container.clientWidth, "using width:", initialWidth);
+
 
     // Create chart instances
     const chart = createChart(container, {
@@ -136,7 +136,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       if (entry) {
         const { width: contentWidth } = entry.contentRect;
         const actualWidth = container.clientWidth || contentWidth || 600;
-        console.log("[CandleChart ResizeObserver] Detected resize - clientWidth:", container.clientWidth, "contentRect.width:", contentWidth, "resized width:", actualWidth);
+
         if (actualWidth > 0) {
           chart.resize(actualWidth, height);
         }
@@ -153,6 +153,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       chartRef.current = null;
       seriesRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [height]);
 
   // Update data dynamically on candles updates

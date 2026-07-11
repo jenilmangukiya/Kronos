@@ -59,7 +59,7 @@ export const Login: React.FC = () => {
           </form>
 
           <p className="mt-6 text-center text-sm text-slate-400">
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link to="/register" className="text-blue-500 hover:text-blue-400 font-semibold transition-colors duration-150">
               Create an account
             </Link>

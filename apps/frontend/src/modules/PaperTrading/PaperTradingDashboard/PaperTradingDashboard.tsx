@@ -5,7 +5,6 @@ import { PaperTradingSummary } from "./components/PaperTradingSummary";
 import { PaperPositionsTable } from "./components/PaperPositionsTable";
 import { PaperOrdersTable } from "./components/PaperOrdersTable";
 import { ExitPositionDialog } from "./components/ExitPositionDialog";
-import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
 import { Spinner } from "../../../components/ui/Spinner";
 import { RefreshCw, PlayCircle, ShieldAlert, Award } from "lucide-react";

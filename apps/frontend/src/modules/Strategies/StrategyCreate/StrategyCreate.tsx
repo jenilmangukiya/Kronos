@@ -9,7 +9,7 @@ import { StrategyJsonPreview } from "../StrategyDetails/components/StrategyJsonP
 import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
 import { Spinner } from "../../../components/ui/Spinner";
-import { UNDERLYING_TOKENS } from "./constants";
+
 import { getStrategyTypeConfig } from "../strategyTypes";
 
 export const StrategyCreate: React.FC = () => {
@@ -64,7 +64,7 @@ export const StrategyCreate: React.FC = () => {
     );
   }
 
-  const underlying = UNDERLYING_TOKENS[form.symbol];
+
   const lotSize = form.symbol === "BANKNIFTY" ? 15 : form.symbol === "NIFTY" ? 65 : 1;
   const quantity = form.instrumentType === "OPTION"
     ? (form.tradeLots || 0) * lotSize

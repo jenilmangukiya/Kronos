@@ -2,7 +2,7 @@ import React from "react";
 import { Strategy } from "../../../../services/strategies/StrategyService";
 import { Card } from "../../../../components/ui/Card";
 import { Badge } from "../../../../components/ui/Badge";
-import { Calendar, Cpu, TrendingUp, ShieldAlert, Award, Sliders, Shield } from "lucide-react";
+import { Calendar, Cpu, TrendingUp, Award, Shield } from "lucide-react";
 import { formatReEntryMode } from "../helpers";
 import { getStrategyTypeConfig } from "../../strategyTypes";
 

@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+
 import { useBrokerAccounts } from "../../../services/broker/BrokerQueries";
 import {
   useGetPaperOrders,
@@ -9,7 +9,7 @@ import { PaperPosition } from "../../../services/paper-trading/PaperTradingServi
 import { DashboardSummary } from "./types";
 
 export const usePaperTradingDashboard = () => {
-  const queryClient = useQueryClient();
+
   const { data: accounts, isLoading: isLoadingAccounts } = useBrokerAccounts();
 
   const activeAccount = useMemo(() => {

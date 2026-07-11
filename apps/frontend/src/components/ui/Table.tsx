@@ -71,6 +71,7 @@ TableRow.displayName = "TableRow";
 export const TableCell = React.forwardRef<
   HTMLTableCellElement,
   React.TdHTMLAttributes<HTMLTableCellElement>
+  // eslint-disable-next-line react/prop-types
 >(({ className, children, ...props }, ref) => (
   <td
     ref={ref}
@@ -85,6 +86,7 @@ TableCell.displayName = "TableCell";
 export const TableHeadCell = React.forwardRef<
   HTMLTableCellElement,
   React.ThHTMLAttributes<HTMLTableCellElement>
+  // eslint-disable-next-line react/prop-types
 >(({ className, children, ...props }, ref) => (
   <th
     ref={ref}

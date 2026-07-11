@@ -94,6 +94,7 @@ export const useFutures = () => {
       isMounted = false;
       // Do not stop the full WebSocket yet on unmount
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brokerAccountId, symbol, tokensList]);
 
   const [consecutiveErrors, setConsecutiveErrors] = useState(0);

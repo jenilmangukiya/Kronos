@@ -209,6 +209,7 @@ export const useStrategyCreate = () => {
     if (isOption && expiries.length > 0 && !form.tradeExpiry) {
       setForm((prev) => ({ ...prev, tradeExpiry: expiries[0] }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expiries, isOption]);
 
   const setFieldValue = (field: keyof StrategyFormValues, value: any) => {
@@ -281,7 +282,6 @@ export const useStrategyCreate = () => {
       return;
     }
 
-    const underlying = UNDERLYING_TOKENS[form.symbol];
     const lotSize = form.symbol === "BANKNIFTY" ? 15 : form.symbol === "NIFTY" ? 65 : 1;
     const futureContract = futures.find((f) => f.token === form.tradeToken);
     const resolvedLotSize = form.instrumentType === "FUTURE" && futureContract ? futureContract.lotSize : lotSize;

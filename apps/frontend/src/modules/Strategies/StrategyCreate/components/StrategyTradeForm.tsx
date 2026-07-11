@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import { Select } from "../../../../components/ui/Select";
 import { Input } from "../../../../components/ui/Input";
 import { StrategyFormValues } from "../types";
@@ -49,6 +49,7 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
         onChange("tradeStrike", defaultStrike);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [optionChain, isFuture, form.tradeStrike]);
 
   // Update token and symbol on Strike or Type change
@@ -65,6 +66,7 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
         onChange("tradeSymbol", "");
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.tradeStrike, form.tradeOptionType, optionChain, isFuture]);
 
   const handleFutureChange = (e: React.ChangeEvent<HTMLSelectElement>) => {

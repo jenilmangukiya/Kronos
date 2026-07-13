@@ -262,7 +262,7 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
       session.positions.forEach((pos) => {
         const isClosed = pos.status === "CLOSED";
         const isLong = pos.side === "LONG";
-        const ltp = isClosed ? pos.currentPrice : (session.currentTradePrice ?? pos.currentPrice);
+        const ltp = pos.currentPrice;
         const expectedPnL = isLong
           ? (ltp - pos.entryPrice) * pos.quantity
           : (pos.entryPrice - ltp) * pos.quantity;
@@ -278,7 +278,7 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
         });
       });
     }
-  }, [isDebugMode, session?.positions, session?.currentTradePrice]);
+  }, [isDebugMode, session?.positions]);
 
   // Poll current session status
   const pollSession = async () => {
@@ -642,7 +642,7 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
         <div className="space-y-2">
           <label className="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider">Replay Speed</label>
           <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-0.5">
-            {[1, 5, 10].map((s) => (
+            {[1, 5, 10, 20].map((s) => (
               <button
                 key={s}
                 disabled={isReplayRunning}
@@ -769,7 +769,7 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
                     {[...session.positions].reverse().map((pos) => {
                       const isClosed = pos.status === "CLOSED";
                       const isLong = pos.side === "LONG";
-                      const ltp = isClosed ? pos.currentPrice : (session.currentTradePrice ?? pos.currentPrice);
+                      const ltp = pos.currentPrice;
                       const expectedPnL = isLong
                         ? (ltp - pos.entryPrice) * pos.quantity
                         : (pos.entryPrice - ltp) * pos.quantity;

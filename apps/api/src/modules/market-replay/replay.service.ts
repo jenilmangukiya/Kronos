@@ -430,19 +430,31 @@ export class ReplayService {
         // Update session live details
         session.currentTime = candle.time;
         session.currentUnderlyingPrice = price;
-        session.currentTradePrice = liveTickStore.getTick(session.brokerAccountId, trade.token)?.ltp ?? price;
         session.totalCandles = session.candles.length;
 
         // Update positions current price and PnL
+        let openPositionLtp: number | null = null;
         for (const pos of session.positions) {
           if (pos.status === "OPEN") {
-            pos.currentPrice = price;
+            let currentPrice = price;
+            if (pos.token !== underlyingToken) {
+              const optPrice = getOptionPriceAtTime(session, pos.token, Number(session.currentTime));
+              if (optPrice !== null) {
+                currentPrice = optPrice;
+              } else {
+                currentPrice = pos.currentPrice || pos.entryPrice;
+              }
+            }
+            pos.currentPrice = currentPrice;
             pos.pnl =
               pos.side === "LONG"
-                ? (price - pos.entryPrice) * pos.quantity
-                : (pos.entryPrice - price) * pos.quantity;
+                ? (currentPrice - pos.entryPrice) * pos.quantity
+                : (pos.entryPrice - currentPrice) * pos.quantity;
+            openPositionLtp = currentPrice;
           }
         }
+
+        session.currentTradePrice = openPositionLtp ?? liveTickStore.getTick(session.brokerAccountId, trade.token)?.ltp ?? price;
 
         // Evaluate Strategy
         const handler = strategyRegistry.get(strategy.strategyType);

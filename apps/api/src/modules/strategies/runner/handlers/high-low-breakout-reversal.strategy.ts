@@ -8,6 +8,7 @@ import type {
 import { AngelInstrumentProvider } from "../../../market-data/providers/angel-instrument.provider.js";
 import { AngelMarketDataProvider } from "../../../market-data/providers/angel.provider.js";
 import { PaperTradingService } from "../../../paper-trading/service.js";
+import { candlesCache } from "../../../market-data/candles-cache.js";
 
 // Lazy-loaded dependencies to break circular imports at load time
 let replaySessions: any = null;
@@ -105,25 +106,49 @@ async function get1MinuteCandles(
   const fromDateStr = `${todayStr} 09:15`;
   const toDateStr = `${todayStr} 15:30`;
 
-  const provider = new AngelMarketDataProvider();
-  const response = await provider.getCandles({
-    apiKey: brokerAccount.apiKey,
-    accessToken: brokerAccount.accessToken,
-    query: {
+  const cached = candlesCache.get(
+    brokerAccountId,
+    exchange,
+    symbolToken,
+    "ONE_MINUTE",
+    fromDateStr,
+    toDateStr,
+  );
+
+  let responseData: any;
+  if (cached) {
+    responseData = cached;
+  } else {
+    const provider = new AngelMarketDataProvider();
+    const response = await provider.getCandles({
+      apiKey: brokerAccount.apiKey,
+      accessToken: brokerAccount.accessToken,
+      query: {
+        brokerAccountId,
+        exchange,
+        symboltoken: symbolToken,
+        interval: "ONE_MINUTE",
+        fromDate: fromDateStr,
+        toDate: toDateStr,
+      },
+    });
+
+    if (!response || !response.status || !response.data) {
+      return [];
+    }
+    responseData = response.data;
+    candlesCache.set(
       brokerAccountId,
       exchange,
-      symboltoken: symbolToken,
-      interval: "ONE_MINUTE",
-      fromDate: fromDateStr,
-      toDate: toDateStr,
-    },
-  });
-
-  if (!response || !response.status || !response.data) {
-    return [];
+      symbolToken,
+      "ONE_MINUTE",
+      fromDateStr,
+      toDateStr,
+      responseData,
+    );
   }
 
-  return response.data.map((item: any) => {
+  return responseData.map((item: any) => {
     let isoString = String(item[0]);
     if (!isoString.includes("+") && !isoString.includes("Z")) {
       const cleanTime = isoString.replace(" ", "T");
@@ -418,9 +443,14 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
             optionLtp = state.putTrack.optionEntryPrice - (eodUnderlyingLtp - state.putTrack.underlyingEntryPrice) * 0.5;
           }
         } else {
-          const tick = liveTickStore.getTick(brokerAccountId, underlyingToken);
-          if (tick) {
-            optionLtp = state.putTrack.optionEntryPrice - (tick.ltp - state.putTrack.underlyingEntryPrice) * 0.5;
+          const optTick = liveTickStore.getTick(brokerAccountId, state.putTrack.optionToken);
+          if (optTick) {
+            optionLtp = optTick.ltp;
+          } else {
+            const tick = liveTickStore.getTick(brokerAccountId, underlyingToken);
+            if (tick) {
+              optionLtp = state.putTrack.optionEntryPrice - (tick.ltp - state.putTrack.underlyingEntryPrice) * 0.5;
+            }
           }
         }
 
@@ -453,9 +483,14 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
             optionLtp = state.callTrack.optionEntryPrice + (eodUnderlyingLtp - state.callTrack.underlyingEntryPrice) * 0.5;
           }
         } else {
-          const tick = liveTickStore.getTick(brokerAccountId, underlyingToken);
-          if (tick) {
-            optionLtp = state.callTrack.optionEntryPrice + (tick.ltp - state.callTrack.underlyingEntryPrice) * 0.5;
+          const optTick = liveTickStore.getTick(brokerAccountId, state.callTrack.optionToken);
+          if (optTick) {
+            optionLtp = optTick.ltp;
+          } else {
+            const tick = liveTickStore.getTick(brokerAccountId, underlyingToken);
+            if (tick) {
+              optionLtp = state.callTrack.optionEntryPrice + (tick.ltp - state.callTrack.underlyingEntryPrice) * 0.5;
+            }
           }
         }
 
@@ -646,6 +681,33 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                   });
                   positionId = orderResult.id;
                 } else {
+                  const brokerAccount = await context.app.db.brokerAccount.findUnique({
+                    where: { id: brokerAccountId },
+                  });
+                  if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
+                    throw new AppError("Broker account session is missing", 400, "BROKER_SESSION_ERROR");
+                  }
+
+                  let livePrice = underlyingLtp * 0.01;
+                  try {
+                    const provider = new AngelMarketDataProvider();
+                    const ltpRes = await provider.getLtp({
+                      apiKey: brokerAccount.apiKey,
+                      accessToken: brokerAccount.accessToken,
+                      query: {
+                        brokerAccountId,
+                        exchange: "NFO",
+                        tradingsymbol: peContract.symbol,
+                        symboltoken: peContract.token,
+                      },
+                    });
+                    if (ltpRes && ltpRes.status && ltpRes.data && ltpRes.data.ltp) {
+                      livePrice = Number(ltpRes.data.ltp);
+                    }
+                  } catch (err) {
+                    context.app.log.error(err, `Failed to fetch live LTP for PE contract ${peContract.symbol}`);
+                  }
+
                   const paperService = new PaperTradingService(context.app.db);
                   const orderResult = await paperService.createOrder(context.strategy.userId, {
                     strategyId: context.strategy.id,
@@ -657,6 +719,7 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                     exchange: "NFO",
                     side: "BUY",
                     quantity: trade.quantity,
+                    price: livePrice,
                   });
                   optionEntryPrice = orderResult.position.avgPrice;
                   positionId = orderResult.position.id;
@@ -885,6 +948,33 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                   });
                   positionId = orderResult.id;
                 } else {
+                  const brokerAccount = await context.app.db.brokerAccount.findUnique({
+                    where: { id: brokerAccountId },
+                  });
+                  if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
+                    throw new AppError("Broker account session is missing", 400, "BROKER_SESSION_ERROR");
+                  }
+
+                  let livePrice = underlyingLtp * 0.01;
+                  try {
+                    const provider = new AngelMarketDataProvider();
+                    const ltpRes = await provider.getLtp({
+                      apiKey: brokerAccount.apiKey,
+                      accessToken: brokerAccount.accessToken,
+                      query: {
+                        brokerAccountId,
+                        exchange: "NFO",
+                        tradingsymbol: ceContract.symbol,
+                        symboltoken: ceContract.token,
+                      },
+                    });
+                    if (ltpRes && ltpRes.status && ltpRes.data && ltpRes.data.ltp) {
+                      livePrice = Number(ltpRes.data.ltp);
+                    }
+                  } catch (err) {
+                    context.app.log.error(err, `Failed to fetch live LTP for CE contract ${ceContract.symbol}`);
+                  }
+
                   const paperService = new PaperTradingService(context.app.db);
                   const orderResult = await paperService.createOrder(context.strategy.userId, {
                     strategyId: context.strategy.id,
@@ -896,6 +986,7 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                     exchange: "NFO",
                     side: "BUY",
                     quantity: trade.quantity,
+                    price: livePrice,
                   });
                   optionEntryPrice = orderResult.position.avgPrice;
                   positionId = orderResult.position.id;

@@ -46,6 +46,14 @@ export interface ReplaySession {
   currentUnderlyingPrice?: number | null;
   currentTradePrice?: number | null;
   totalCandles?: number | null;
+  totalTrades?: number;
+  winningTrades?: number;
+  losingTrades?: number;
+  totalPnl?: number;
+  maxProfit?: number;
+  maxLoss?: number;
+  isPaused?: boolean;
+  shouldStep?: boolean;
 }
 
 export interface StartReplayInput {

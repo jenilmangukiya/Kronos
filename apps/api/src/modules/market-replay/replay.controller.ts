@@ -23,6 +23,30 @@ export class ReplayController {
     return { success: true };
   }
 
+  async pauseReplay(userId: string | undefined) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+    await this.replayService.pauseReplay(userId);
+    return { success: true };
+  }
+
+  async resumeReplay(userId: string | undefined) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+    await this.replayService.resumeReplay(userId);
+    return { success: true };
+  }
+
+  async stepReplay(userId: string | undefined) {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+    await this.replayService.stepReplay(userId);
+    return { success: true };
+  }
+
   async getSession(userId: string | undefined) {
     if (!userId) {
       throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
@@ -89,6 +113,60 @@ export async function replayRoutes(app: FastifyInstance) {
     },
     async (request) => {
       return replayController.stopReplay(request.user?.id);
+    },
+  );
+
+  typedApp.post(
+    "/replay/pause",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Replay"],
+        summary: "Pause replay session",
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: z.any(),
+        },
+      },
+    },
+    async (request) => {
+      return replayController.pauseReplay(request.user?.id);
+    },
+  );
+
+  typedApp.post(
+    "/replay/resume",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Replay"],
+        summary: "Resume replay session",
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: z.any(),
+        },
+      },
+    },
+    async (request) => {
+      return replayController.resumeReplay(request.user?.id);
+    },
+  );
+
+  typedApp.post(
+    "/replay/step",
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ["Replay"],
+        summary: "Step replay session",
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: z.any(),
+        },
+      },
+    },
+    async (request) => {
+      return replayController.stepReplay(request.user?.id);
     },
   );
 

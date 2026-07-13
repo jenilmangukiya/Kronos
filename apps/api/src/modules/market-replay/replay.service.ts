@@ -20,6 +20,18 @@ function formatReplayTime(timestamp: number | string | null | undefined): string
   });
 }
 
+function updateSessionStats(session: ReplaySession, pnl: number) {
+  session.totalTrades = (session.totalTrades ?? 0) + 1;
+  if (pnl > 0) {
+    session.winningTrades = (session.winningTrades ?? 0) + 1;
+  } else {
+    session.losingTrades = (session.losingTrades ?? 0) + 1;
+  }
+  session.totalPnl = (session.totalPnl ?? 0) + pnl;
+  session.maxProfit = Math.max(session.maxProfit ?? 0, pnl);
+  session.maxLoss = Math.min(session.maxLoss ?? 0, pnl);
+}
+
 export class ReplayPaperService {
   constructor(private readonly session: ReplaySession) {}
 
@@ -89,6 +101,7 @@ export class ReplayPaperService {
             : (existingPosition.entryPrice - price) * existingPosition.quantity;
         existingPosition.realizedPnl = pnl;
         existingPosition.pnl = pnl;
+        updateSessionStats(session, pnl);
         return existingPosition;
       } else {
         const pnl =
@@ -130,6 +143,7 @@ export class ReplayPaperService {
     position.realizedPnl = pnl;
     position.pnl = pnl;
     position.currentPrice = price;
+    updateSessionStats(session, pnl);
 
     const timeStr = formatReplayTime(session.currentTime);
     const prefix = timeStr ? `[${timeStr}] ` : "";
@@ -175,6 +189,14 @@ export class ReplayService {
       currentUnderlyingPrice: null,
       currentTradePrice: null,
       totalCandles: 0,
+      totalTrades: 0,
+      winningTrades: 0,
+      losingTrades: 0,
+      totalPnl: 0,
+      maxProfit: 0,
+      maxLoss: 0,
+      isPaused: false,
+      shouldStep: false,
     };
 
     replaySessions.set(userId, session);
@@ -202,8 +224,47 @@ export class ReplayService {
     replaySessions.delete(userId);
   }
 
-  async getSession(userId: string): Promise<ReplaySession | null> {
-    return replaySessions.get(userId) || null;
+  async getSession(userId: string): Promise<any | null> {
+    const session = replaySessions.get(userId);
+    if (!session) return null;
+
+    const totalTrades = session.totalTrades ?? 0;
+    const winningTrades = session.winningTrades ?? 0;
+    const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
+    const avgPnl = totalTrades > 0 ? (session.totalPnl ?? 0) / totalTrades : 0;
+
+    return {
+      ...session,
+      winRate,
+      avgPnl,
+    };
+  }
+
+  async pauseReplay(userId: string): Promise<void> {
+    const session = replaySessions.get(userId);
+    if (!session) {
+      throw new AppError("No active replay session found for this user", 404, "REPLAY_SESSION_NOT_FOUND");
+    }
+    session.isPaused = true;
+  }
+
+  async resumeReplay(userId: string): Promise<void> {
+    const session = replaySessions.get(userId);
+    if (!session) {
+      throw new AppError("No active replay session found for this user", 404, "REPLAY_SESSION_NOT_FOUND");
+    }
+    session.isPaused = false;
+  }
+
+  async stepReplay(userId: string): Promise<void> {
+    const session = replaySessions.get(userId);
+    if (!session) {
+      throw new AppError("No active replay session found for this user", 404, "REPLAY_SESSION_NOT_FOUND");
+    }
+    if (!session.isPaused) {
+      throw new AppError("Replay must be paused to step", 400, "REPLAY_NOT_PAUSED");
+    }
+    session.shouldStep = true;
   }
 
   async runReplayLoop(session: ReplaySession): Promise<void> {
@@ -246,6 +307,15 @@ export class ReplayService {
       for (const price of prices) {
         if (!session.isRunning) {
           break;
+        }
+
+        // Wait if paused and not stepping
+        while (session.isRunning && session.isPaused && !session.shouldStep) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+
+        if (session.shouldStep) {
+          session.shouldStep = false;
         }
 
         // Push tick to liveTickStore

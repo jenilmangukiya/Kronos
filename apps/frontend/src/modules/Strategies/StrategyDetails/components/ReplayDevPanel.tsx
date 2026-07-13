@@ -37,6 +37,16 @@ interface ReplaySession {
   currentUnderlyingPrice?: number | null;
   currentTradePrice?: number | null;
   totalCandles?: number | null;
+  totalTrades?: number;
+  winningTrades?: number;
+  losingTrades?: number;
+  totalPnl?: number;
+  maxProfit?: number;
+  maxLoss?: number;
+  winRate?: number;
+  avgPnl?: number;
+  isPaused?: boolean;
+  shouldStep?: boolean;
 }
 
 interface ReplayDevPanelProps {
@@ -217,6 +227,48 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
     }
   };
 
+  // Handle Pause Replay
+  const handlePause = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await axiosAuth.post("/replay/pause");
+      await pollSession();
+    } catch (err: any) {
+      setError(err?.response?.data?.error?.message || "Failed to pause replay.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Resume Replay
+  const handleResume = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await axiosAuth.post("/replay/resume");
+      await pollSession();
+    } catch (err: any) {
+      setError(err?.response?.data?.error?.message || "Failed to resume replay.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle Step Replay
+  const handleStep = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await axiosAuth.post("/replay/step");
+      await pollSession();
+    } catch (err: any) {
+      setError(err?.response?.data?.error?.message || "Failed to step replay.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const isReplayRunning = session?.isRunning || false;
 
   return (
@@ -281,7 +333,7 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
           const percent = total > 0 ? Math.round((current / total) * 100) : 0;
 
           return (
-            <div className="space-y-4 animate-fadeIn">
+            <div className="space-y-5 animate-fadeIn">
               {/* Progress Bar */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center text-[10px] uppercase font-black text-slate-500 tracking-wider">
@@ -351,6 +403,61 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
                   <span className="text-sm font-black text-rose-400 font-mono mt-1.5">
                     {session.speed}x
                   </span>
+                </div>
+              </div>
+
+              {/* Performance Metrics Summary */}
+              <div className="space-y-2 bg-slate-900/30 border border-slate-805 rounded-xl p-4.5">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 border-b border-slate-800 pb-2 mb-3">
+                  <Activity className="h-3.5 w-3.5 text-amber-500" />
+                  Performance Metrics Summary
+                </h4>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* Total Trades & Win Rate */}
+                  <div className="bg-slate-950/40 border border-slate-900/60 rounded-xl p-3.5 flex flex-col justify-between">
+                    <span className="text-[9px] uppercase font-extrabold tracking-wider text-slate-500">Total Trades</span>
+                    <span className="text-base font-black text-slate-100 font-mono mt-1">
+                      {session.totalTrades ?? 0}
+                    </span>
+                    <span className="text-[9.5px] text-slate-500 mt-1">
+                      Wins: {session.winningTrades ?? 0} | Losses: {session.losingTrades ?? 0}
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-950/40 border border-slate-900/60 rounded-xl p-3.5 flex flex-col justify-between">
+                    <span className="text-[9px] uppercase font-extrabold tracking-wider text-slate-500">Win Rate</span>
+                    <span className="text-base font-black text-amber-400 font-mono mt-1">
+                      {(session.winRate ?? 0).toFixed(1)}%
+                    </span>
+                    <div className="w-full bg-slate-900 h-1 mt-2 overflow-hidden rounded-full">
+                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${session.winRate ?? 0}%` }} />
+                    </div>
+                  </div>
+
+                  {/* Total PnL & Avg PnL */}
+                  <div className="bg-slate-950/40 border border-slate-900/60 rounded-xl p-3.5 flex flex-col justify-between">
+                    <span className="text-[9px] uppercase font-extrabold tracking-wider text-slate-500">Total PnL</span>
+                    <span className={`text-base font-black font-mono mt-1 ${(session.totalPnl ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      {formatCurrency(session.totalPnl ?? 0)}
+                    </span>
+                    <span className="text-[9.5px] text-slate-500 mt-1">
+                      Avg / Trade: {formatCurrency(session.avgPnl ?? 0)}
+                    </span>
+                  </div>
+
+                  {/* Max Profit / Loss */}
+                  <div className="bg-slate-950/40 border border-slate-900/60 rounded-xl p-3.5 flex flex-col justify-between">
+                    <span className="text-[9px] uppercase font-extrabold tracking-wider text-slate-500">Peak Stats</span>
+                    <span className="text-[10px] font-black text-slate-300 font-mono mt-1 flex justify-between">
+                      <span>Max Profit:</span>
+                      <span className="text-emerald-400">{formatCurrency(session.maxProfit ?? 0)}</span>
+                    </span>
+                    <span className="text-[10px] font-black text-slate-300 font-mono mt-1 flex justify-between">
+                      <span>Max Loss:</span>
+                      <span className="text-rose-400">{formatCurrency(session.maxLoss ?? 0)}</span>
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -431,22 +538,62 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
         </div>
       </div>
 
+      {/* Playback Controls (Pause/Resume/Step) */}
+      {session && (
+        <div className="flex flex-wrap gap-3 pt-4 border-t border-slate-900 animate-fadeIn">
+          {session.isPaused ? (
+            <button
+              onClick={handleResume}
+              disabled={isLoading}
+              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs py-2.5 rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 transition-all uppercase tracking-wider active:scale-[0.98]"
+            >
+              <Play className="h-4 w-4 fill-slate-950" /> Resume Replay
+            </button>
+          ) : (
+            <button
+              onClick={handlePause}
+              disabled={isLoading}
+              className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs py-2.5 rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-amber-500/10 hover:shadow-amber-500/20 transition-all uppercase tracking-wider active:scale-[0.98]"
+            >
+              <div className="flex gap-1 h-3.5 items-center justify-center select-none">
+                <div className="w-0.75 bg-slate-950 h-3.5 rounded-sm" />
+                <div className="w-0.75 bg-slate-950 h-3.5 rounded-sm" />
+              </div>
+              Pause Replay
+            </button>
+          )}
+
+          {session.isPaused && (
+            <button
+              onClick={handleStep}
+              disabled={isLoading}
+              className="flex-1 bg-blue-500 hover:bg-blue-600 text-slate-950 font-black text-xs py-2.5 rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-blue-500/10 hover:shadow-blue-500/20 transition-all uppercase tracking-wider active:scale-[0.98]"
+            >
+              <svg className="h-4 w-4 fill-slate-950" viewBox="0 0 24 24">
+                <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+              </svg>
+              Next Step
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Grid of Results: Positions and Logs */}
       {session && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 border-t border-slate-900 animate-fadeIn">
           {/* Replay Positions */}
-          <div className="space-y-3 bg-slate-900/30 border border-slate-900 rounded-xl p-4.5">
-            <h4 className="text-xs font-black text-slate-200 uppercase tracking-widest flex items-center gap-2 border-b border-slate-900 pb-2">
+          <div className="space-y-3 bg-slate-900/30 border border-slate-900 rounded-xl p-4.5 flex flex-col h-[350px]">
+            <h4 className="text-xs font-black text-slate-200 uppercase tracking-widest flex items-center gap-2 border-b border-slate-900 pb-2 shrink-0">
               <Play className="h-3.5 w-3.5 text-amber-500" />
               Replay Positions ({session.positions.length})
             </h4>
 
             {session.positions.length === 0 ? (
-              <div className="text-center py-12 text-slate-500 text-xs italic">
+              <div className="text-center py-12 text-slate-500 text-xs italic flex-1 flex items-center justify-center">
                 No simulated positions opened yet.
               </div>
             ) : (
-              <div className="overflow-x-auto pr-1">
+              <div className="flex-1 overflow-y-auto overflow-x-auto pr-1 custom-scrollbar">
                 <table className="w-full text-left text-[11px] font-mono">
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-500 uppercase tracking-wider text-[9px] font-bold">
@@ -565,7 +712,7 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
           </div>
 
           {/* Replay Logs */}
-          <div className="space-y-3 bg-slate-900/30 border border-slate-900 rounded-xl p-4.5 flex flex-col h-[280px]">
+          <div className="space-y-3 bg-slate-900/30 border border-slate-900 rounded-xl p-4.5 flex flex-col h-[350px]">
             <h4 className="text-xs font-black text-slate-200 uppercase tracking-widest flex items-center justify-between border-b border-slate-900 pb-2">
               <span className="flex items-center gap-2">
                 <Terminal className="h-3.5 w-3.5 text-amber-500" />
@@ -585,18 +732,64 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
                 No logs recorded yet.
               </div>
             ) : (
-              <div ref={logContainerRef} className="flex-1 overflow-y-auto font-mono text-[10px] space-y-1.5 pr-2 custom-scrollbar bg-slate-950/80 border border-slate-900 p-3 rounded-lg leading-relaxed">
+              <div ref={logContainerRef} className="flex-1 overflow-y-auto font-mono text-[10px] space-y-2 pr-2 custom-scrollbar bg-slate-950/80 border border-slate-900 p-3 rounded-lg leading-relaxed">
                 {session.logs.map((log) => {
-                  const isExit = log.message.includes("Exited") || log.message.includes("hit");
-                  const isEntry = log.message.includes("Entered") || log.message.includes("Signal");
-                  let colorClass = "text-slate-400";
-                  if (isExit) colorClass = log.message.includes("PnL: -") ? "text-rose-400" : "text-emerald-400";
-                  else if (isEntry) colorClass = "text-blue-400";
+                  const isTargetHit = log.message.includes("Target hit");
+                  const isSLHit = log.message.includes("Stop Loss hit");
+                  const isEntrySignal = log.message.includes("Entry Signal");
+                  const isEntered = log.message.includes("Entered");
+                  const isExited = log.message.includes("Exited");
+
+                  let colorClass = "text-slate-300";
+                  let bgClass = "bg-slate-900/20";
+                  let borderClass = "border-slate-800/40";
+                  let tagText = "LOG";
+                  let tagColor = "bg-slate-850 text-slate-400 border border-slate-800/40";
+
+                  if (isTargetHit) {
+                    colorClass = "text-emerald-400 font-bold";
+                    bgClass = "bg-emerald-500/5";
+                    borderClass = "border-emerald-500/20";
+                    tagText = "TARGET HIT";
+                    tagColor = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                  } else if (isSLHit) {
+                    colorClass = "text-rose-400 font-bold";
+                    bgClass = "bg-rose-500/5";
+                    borderClass = "border-rose-500/20";
+                    tagText = "STOP LOSS";
+                    tagColor = "bg-rose-500/20 text-rose-400 border border-rose-500/30";
+                  } else if (isEntrySignal) {
+                    colorClass = "text-indigo-400 font-medium";
+                    bgClass = "bg-indigo-500/5";
+                    borderClass = "border-indigo-500/20";
+                    tagText = "SIGNAL";
+                    tagColor = "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30";
+                  } else if (isEntered) {
+                    colorClass = "text-blue-400 font-semibold";
+                    bgClass = "bg-blue-500/5";
+                    borderClass = "border-blue-500/20";
+                    tagText = "ENTRY";
+                    tagColor = "bg-blue-500/20 text-blue-400 border border-blue-500/30";
+                  } else if (isExited) {
+                    const hasLoss = log.message.includes("PnL: -") || log.message.includes("PnL: ₹-");
+                    colorClass = hasLoss ? "text-rose-400 font-semibold" : "text-emerald-400 font-semibold";
+                    bgClass = "bg-slate-900/40";
+                    borderClass = "border-slate-800/60";
+                    tagText = "EXIT";
+                    tagColor = hasLoss
+                      ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                      : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                  }
 
                   return (
-                    <div key={log.id} className="flex items-start gap-1">
-                      <span className="text-slate-600 select-none shrink-0">&gt;</span>
-                      <span className={colorClass}>{log.message}</span>
+                    <div
+                      key={log.id}
+                      className={`flex items-start md:items-center gap-2.5 p-2 rounded-lg border ${bgClass} ${borderClass} transition-all duration-150`}
+                    >
+                      <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${tagColor} select-none`}>
+                        {tagText}
+                      </span>
+                      <span className={`flex-1 break-all font-mono text-[10px] ${colorClass}`}>{log.message}</span>
                     </div>
                   );
                 })}

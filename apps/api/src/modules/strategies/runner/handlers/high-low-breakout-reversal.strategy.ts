@@ -666,11 +666,27 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                   ]);
                 }
 
-                const riskPoints = Math.abs(state.putTrack.decisionCandle.high - underlyingLtp);
-                const riskValue = riskPoints * 0.5;
+                const candleRange = state.putTrack.decisionCandle.high - underlyingLtp;
+                let stopLoss: number;
+                let mode: string;
+                if (candleRange < 10) {
+                  stopLoss = underlyingLtp + 10;
+                  mode = "FIXED_10";
+                } else {
+                  stopLoss = state.putTrack.decisionCandle.high;
+                  mode = "CANDLE_BASED";
+                }
+
+                await addStrategyLog(
+                  context,
+                  `[SL LOGIC]\nCandle Range: ${candleRange}\nApplied SL: ${stopLoss}\nMode: ${mode}`
+                );
+
+                const actualRisk = Math.abs(stopLoss - underlyingLtp);
+                const riskValue = actualRisk * 0.5;
                 const rewardRatio = risk?.rewardRatio || 3;
-                const underlyingSL = state.putTrack.decisionCandle.high;
-                const underlyingTarget = underlyingLtp - (rewardRatio * riskPoints);
+                const underlyingSL = stopLoss;
+                const underlyingTarget = underlyingLtp - (rewardRatio * actualRisk);
                 const optionTarget = optionEntryPrice + rewardRatio * riskValue;
                 const optionSL = optionEntryPrice - riskValue;
 
@@ -889,11 +905,27 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                   ]);
                 }
 
-                const riskPoints = Math.abs(underlyingLtp - state.callTrack.decisionCandle.low);
-                const riskValue = riskPoints * 0.5;
+                const candleRange = underlyingLtp - state.callTrack.decisionCandle.low;
+                let stopLoss: number;
+                let mode: string;
+                if (candleRange < 10) {
+                  stopLoss = underlyingLtp - 10;
+                  mode = "FIXED_10";
+                } else {
+                  stopLoss = state.callTrack.decisionCandle.low;
+                  mode = "CANDLE_BASED";
+                }
+
+                await addStrategyLog(
+                  context,
+                  `[SL LOGIC]\nCandle Range: ${candleRange}\nApplied SL: ${stopLoss}\nMode: ${mode}`
+                );
+
+                const actualRisk = Math.abs(stopLoss - underlyingLtp);
+                const riskValue = actualRisk * 0.5;
                 const rewardRatio = risk?.rewardRatio || 3;
-                const underlyingSL = state.callTrack.decisionCandle.low;
-                const underlyingTarget = underlyingLtp + (rewardRatio * riskPoints);
+                const underlyingSL = stopLoss;
+                const underlyingTarget = underlyingLtp + (rewardRatio * actualRisk);
                 const optionTarget = optionEntryPrice + rewardRatio * riskValue;
                 const optionSL = optionEntryPrice - riskValue;
 

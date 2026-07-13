@@ -10,6 +10,8 @@ export const formatStrategyType = (strategyType?: string): string => {
   switch (strategyType) {
     case "PRICE_BREAKOUT":
       return "Price Breakout";
+    case "HIGH_LOW_BREAKOUT_REVERSAL":
+      return "High/Low Breakout Reversal";
     default:
       return toTitleCase(strategyType);
   }

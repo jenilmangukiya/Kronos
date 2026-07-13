@@ -31,11 +31,38 @@ export const StrategyBasicForm: React.FC<StrategyBasicFormProps> = ({ form, onCh
         />
 
         <Select
-          label="Instrument Type"
-          value={form.instrumentType}
-          options={INSTRUMENT_TYPE_OPTIONS}
-          onChange={(e) => onChange("instrumentType", e.target.value)}
+          label="Strategy Type"
+          value={form.strategyType || "PRICE_BREAKOUT"}
+          options={[
+            { value: "PRICE_BREAKOUT", label: "Price Breakout" },
+            { value: "HIGH_LOW_BREAKOUT_REVERSAL", label: "High-Low Breakout Reversal" },
+          ]}
+          onChange={(e) => {
+            const val = e.target.value;
+            onChange("strategyType", val);
+            if (val === "HIGH_LOW_BREAKOUT_REVERSAL") {
+              onChange("instrumentType", "OPTION");
+            }
+          }}
         />
+
+        {form.strategyType !== "HIGH_LOW_BREAKOUT_REVERSAL" ? (
+          <Select
+            label="Instrument Type"
+            value={form.instrumentType}
+            options={INSTRUMENT_TYPE_OPTIONS}
+            onChange={(e) => onChange("instrumentType", e.target.value)}
+          />
+        ) : (
+          <div className="w-full">
+            <label className="block text-sm font-medium text-slate-400 mb-1.5">
+              Instrument Type
+            </label>
+            <div className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3.5 py-2 text-sm text-slate-400 select-none font-semibold">
+              OPTION (Required for High-Low Breakout Reversal)
+            </div>
+          </div>
+        )}
 
         <div className="w-full">
           <label className="block text-sm font-medium text-slate-400 mb-1.5">

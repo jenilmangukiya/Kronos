@@ -107,15 +107,26 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Buy/Sell side */}
-        <Select
-          label="Order Side"
-          value={form.tradeSide}
-          options={[
-            { value: "BUY", label: "BUY / LONG" },
-            { value: "SELL", label: "SELL / SHORT" },
-          ]}
-          onChange={(e) => onChange("tradeSide", e.target.value)}
-        />
+        {form.strategyType !== "HIGH_LOW_BREAKOUT_REVERSAL" ? (
+          <Select
+            label="Order Side"
+            value={form.tradeSide}
+            options={[
+              { value: "BUY", label: "BUY / LONG" },
+              { value: "SELL", label: "SELL / SHORT" },
+            ]}
+            onChange={(e) => onChange("tradeSide", e.target.value)}
+          />
+        ) : (
+          <div className="w-full">
+            <label className="block text-sm font-medium text-slate-400 mb-1.5">
+              Order Side
+            </label>
+            <div className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3.5 py-2 text-sm text-slate-400 select-none font-semibold">
+              BUY (Long ATM Options)
+            </div>
+          </div>
+        )}
 
         {/* Quantity / Lots */}
         <div className="w-full">
@@ -173,7 +184,7 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
               />
             )}
 
-            {form.tradeExpiry && (
+            {form.tradeExpiry && form.strategyType !== "HIGH_LOW_BREAKOUT_REVERSAL" && (
               <>
                 {isOptionChainLoading ? (
                   <div className="sm:col-span-2 flex items-center gap-2 py-4 justify-center text-slate-400 text-xs">

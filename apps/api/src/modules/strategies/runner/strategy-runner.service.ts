@@ -54,6 +54,8 @@ export class StrategyRunnerService {
         },
       });
 
+      // this.app.log.info(`[RUNNER] Active strategies: ${strategies.length}`);
+
       for (const strategy of strategies) {
         await this.evaluateStrategy(strategy);
       }
@@ -75,6 +77,32 @@ export class StrategyRunnerService {
     risk: unknown;
     state?: unknown;
   }) {
+    const handler = strategyRegistry.get(strategy.strategyType);
+    if (!handler) {
+      this.app.log.error(
+        `[ERROR] No handler found for strategyType: ${strategy.strategyType}`,
+      );
+      await this.addLog(
+        strategy.id,
+        `[ERROR] No handler found for strategyType: ${strategy.strategyType}`,
+      );
+      return;
+    }
+
+    this.app.log.info(
+      `[RUNNER] Executing strategy: ${strategy.id}, type: ${strategy.strategyType}`,
+    );
+
+    if (strategy.strategyType === "HIGH_LOW_BREAKOUT_REVERSAL") {
+      if (handler.execute) {
+        await handler.execute({
+          app: this.app,
+          strategy,
+        });
+      }
+      return;
+    }
+
     const openPosition = await this.app.db.paperPosition.findFirst({
       where: {
         userId: strategy.userId,

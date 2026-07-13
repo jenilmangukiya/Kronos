@@ -51,7 +51,7 @@ export class ReplayPaperService {
     const prefix = timeStr ? `[${timeStr}] ` : "";
     session.logs.push({
       id: `log_${Math.random().toString(36).substring(2, 11)}`,
-      message: `${prefix}Entered ${input.side} at ₹${price} for ${input.symbol}`,
+      message: `${prefix}[ENTRY] Entered ${input.side} at ₹${price} for ${input.symbol}`,
       meta: {
         symbol: input.symbol,
         side: input.side,
@@ -80,6 +80,7 @@ export class ReplayPaperService {
         pnl: 0,
         openedAt: new Date(),
         closedAt: null,
+        openedAtMarketTime: session.currentTime ? Number(session.currentTime) : undefined,
       };
       session.positions.push(newPos);
       return newPos;
@@ -95,6 +96,7 @@ export class ReplayPaperService {
       if (existingPosition.quantity === input.quantity) {
         existingPosition.status = "CLOSED";
         existingPosition.closedAt = new Date();
+        existingPosition.closedAtMarketTime = session.currentTime ? Number(session.currentTime) : undefined;
         const pnl =
           existingPosition.side === "LONG"
             ? (price - existingPosition.entryPrice) * existingPosition.quantity
@@ -135,6 +137,7 @@ export class ReplayPaperService {
 
     position.status = "CLOSED";
     position.closedAt = new Date();
+    position.closedAtMarketTime = session.currentTime ? Number(session.currentTime) : undefined;
 
     const pnl =
       position.side === "LONG"
@@ -149,7 +152,7 @@ export class ReplayPaperService {
     const prefix = timeStr ? `[${timeStr}] ` : "";
     session.logs.push({
       id: `log_${Math.random().toString(36).substring(2, 11)}`,
-      message: `${prefix}Exited at ₹${price} (PnL: ₹${pnl})`,
+      message: `${prefix}[EXIT] Exited at ₹${price} (PnL: ₹${pnl})`,
       meta: {
         price,
         pnl,
@@ -164,6 +167,71 @@ export class ReplayPaperService {
 export class ReplayService {
   constructor(private readonly app: FastifyInstance) {}
 
+  private async getYesterdayHighLow(
+    brokerAccountId: string,
+    exchange: string,
+    symbolToken: string,
+    currentDate: Date,
+  ): Promise<{ high: number; low: number }> {
+    const brokerAccount = await this.app.db.brokerAccount.findUnique({
+      where: { id: brokerAccountId },
+    });
+    if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
+      throw new AppError("Broker account session is missing", 400, "BROKER_SESSION_ERROR");
+    }
+
+    const toDate = new Date(currentDate);
+    toDate.setDate(toDate.getDate() - 1);
+    const fromDate = new Date(currentDate);
+    fromDate.setDate(fromDate.getDate() - 10);
+
+    const formatDate = (d: Date) => {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    const fromDateStr = `${formatDate(fromDate)} 09:15`;
+    const toDateStr = `${formatDate(toDate)} 15:30`;
+
+    const provider = new AngelMarketDataProvider();
+    const response = await provider.getCandles({
+      apiKey: brokerAccount.apiKey,
+      accessToken: brokerAccount.accessToken,
+      query: {
+        brokerAccountId,
+        exchange,
+        symboltoken: symbolToken,
+        interval: "ONE_DAY",
+        fromDate: fromDateStr,
+        toDate: toDateStr,
+      },
+    });
+
+    if (!response || !response.status || !response.data || response.data.length === 0) {
+      throw new AppError("Failed to fetch yesterday's candle data", 502, "CANDLE_FETCH_ERROR");
+    }
+
+    const candles = response.data.map((item: any) => {
+      let isoString = String(item[0]);
+      if (!isoString.includes("+") && !isoString.includes("Z")) {
+        const cleanTime = isoString.replace(" ", "T");
+        isoString = cleanTime.includes("T") ? `${cleanTime}+05:30` : `${cleanTime}T00:00:00+05:30`;
+      }
+      return {
+        time: new Date(isoString).getTime(),
+        high: Number(item[2]),
+        low: Number(item[3]),
+      };
+    }).sort((a: any, b: any) => b.time - a.time);
+
+    return {
+      high: candles[0].high,
+      low: candles[0].low,
+    };
+  }
+
   async startReplay(userId: string, input: StartReplayInput): Promise<ReplaySession> {
     if (replaySessions.has(userId)) {
       throw new AppError(
@@ -171,6 +239,36 @@ export class ReplayService {
         400,
         "REPLAY_SESSION_ALREADY_EXISTS",
       );
+    }
+
+    let yesterdayHigh = input.yesterdayHigh ?? 0;
+    let yesterdayLow = input.yesterdayLow ?? 0;
+
+    if ((!yesterdayHigh || !yesterdayLow) && input.date) {
+      const strategy = await this.app.db.strategy.findUnique({
+        where: { id: input.strategyId },
+      });
+      if (strategy && strategy.strategyType === "HIGH_LOW_BREAKOUT_REVERSAL") {
+        const rules = strategy.rules as any;
+        const underlyingToken = rules?.underlyingToken;
+        const exchange = rules?.underlyingExchange || "NSE";
+        if (underlyingToken) {
+          try {
+            const yesterday = await this.getYesterdayHighLow(
+              input.brokerAccountId,
+              exchange,
+              underlyingToken,
+              new Date(input.date),
+            );
+            yesterdayHigh = yesterday.high;
+            yesterdayLow = yesterday.low;
+          } catch (err) {
+            this.app.log.warn(err, `Failed to fetch yesterday's High/Low in startReplay. Using baseline fallbacks.`);
+            yesterdayHigh = 24000;
+            yesterdayLow = 23800;
+          }
+        }
+      }
     }
 
     const session: ReplaySession = {
@@ -197,6 +295,9 @@ export class ReplayService {
       maxLoss: 0,
       isPaused: false,
       shouldStep: false,
+      yesterdayHigh,
+      yesterdayLow,
+      optionCandles: new Map(),
     };
 
     replaySessions.set(userId, session);
@@ -346,6 +447,19 @@ export class ReplayService {
         // Evaluate Strategy
         const handler = strategyRegistry.get(strategy.strategyType);
         if (handler) {
+          if (strategy.strategyType === "HIGH_LOW_BREAKOUT_REVERSAL") {
+            if (handler.execute) {
+              await handler.execute({
+                app: this.app,
+                strategy,
+                isReplay: true,
+              });
+            }
+            const delayMs = 1000 / session.speed;
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue;
+          }
+
           const openPosition = session.positions.find((p) => p.status === "OPEN");
 
           if (openPosition) {
@@ -384,7 +498,7 @@ export class ReplayService {
 
                 session.logs.push({
                   id: `log_${Math.random().toString(36).substring(2, 11)}`,
-                  message: `${prefix}${exitReason}`,
+                  message: `${prefix}[EXIT] ${exitReason}`,
                   meta: { ltp, avgPrice },
                   createdAt: new Date(),
                 });
@@ -406,7 +520,7 @@ export class ReplayService {
 
               session.logs.push({
                 id: `log_${Math.random().toString(36).substring(2, 11)}`,
-                message: `${prefix}Entry Signal: ${decision.reason}`,
+                message: `${prefix}[ENTRY] Entry Signal: ${decision.reason}`,
                 meta: decision.meta,
                 createdAt: new Date(),
               });
@@ -572,5 +686,115 @@ export class ReplayService {
 
     return normalizedCandles;
   }
+
+  /**
+   * Fetch historical 1-minute candles for an option contract and cache them
+   * in the session's optionCandles map.
+   */
+  async fetchOptionCandles(
+    session: ReplaySession,
+    optionToken: string,
+    exchange: string,
+    date: string,
+  ): Promise<ReplayCandle[]> {
+    // Return cached if already fetched
+    if (session.optionCandles?.has(optionToken)) {
+      return session.optionCandles.get(optionToken)!;
+    }
+
+    const brokerAccount = await this.app.db.brokerAccount.findUnique({
+      where: { id: session.brokerAccountId },
+    });
+
+    if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
+      this.app.log.warn(`[Replay] Cannot fetch option candles: broker session missing`);
+      return [];
+    }
+
+    const fromDate = `${date} 09:15`;
+    const toDate = `${date} 15:30`;
+
+    try {
+      const provider = new AngelMarketDataProvider();
+      const response = await provider.getCandles({
+        apiKey: brokerAccount.apiKey,
+        accessToken: brokerAccount.accessToken,
+        query: {
+          brokerAccountId: session.brokerAccountId,
+          exchange,
+          symboltoken: optionToken,
+          interval: "ONE_MINUTE" as any,
+          fromDate,
+          toDate,
+        },
+      });
+
+      if (!response || !response.status || !response.data) {
+        this.app.log.warn(`[Replay] No option candle data for token ${optionToken}`);
+        return [];
+      }
+
+      const candles: ReplayCandle[] = response.data.map((item: any) => {
+        let isoString = String(item[0]);
+        if (!isoString.includes("+") && !isoString.includes("Z")) {
+          const cleanTime = isoString.replace(" ", "T");
+          if (cleanTime.includes("T") && cleanTime.split("T")[1]?.length === 5) {
+            isoString = `${cleanTime}:00+05:30`;
+          } else if (cleanTime.includes("T")) {
+            isoString = `${cleanTime}+05:30`;
+          } else {
+            isoString = `${cleanTime}T00:00:00+05:30`;
+          }
+        }
+        return {
+          time: Math.floor(new Date(isoString).getTime() / 1000),
+          open: Number(item[1]),
+          high: Number(item[2]),
+          low: Number(item[3]),
+          close: Number(item[4]),
+        };
+      });
+
+      if (!session.optionCandles) {
+        session.optionCandles = new Map();
+      }
+      session.optionCandles.set(optionToken, candles);
+
+      this.app.log.info(
+        `[Replay] Fetched ${candles.length} option candles for token ${optionToken} on ${date}`
+      );
+
+      return candles;
+    } catch (err) {
+      this.app.log.warn(err, `[Replay] Failed to fetch option candles for token ${optionToken}`);
+      return [];
+    }
+  }
+}
+
+/**
+ * Look up the option price at a given timestamp from cached option candles.
+ * Returns the close price of the candle whose time is closest (≤ timestamp).
+ * Returns null if no data is available.
+ */
+export function getOptionPriceAtTime(
+  session: ReplaySession,
+  optionToken: string,
+  timestampSec: number,
+): number | null {
+  const candles = session.optionCandles?.get(optionToken);
+  if (!candles || candles.length === 0) return null;
+
+  // Find the last candle whose time <= timestampSec
+  let best: ReplayCandle | null = null;
+  for (const c of candles) {
+    if (c.time <= timestampSec) {
+      best = c;
+    } else {
+      break; // candles are sorted by time ascending
+    }
+  }
+
+  return best ? best.close : null;
 }
 

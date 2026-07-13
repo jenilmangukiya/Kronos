@@ -34,31 +34,48 @@ export const StrategyRiskForm: React.FC<StrategyRiskFormProps> = ({ form, onChan
           ]}
         />
 
-        <Input
-          label="Stop Loss (%)"
-          type="number"
-          placeholder="e.g. 5"
-          value={form.stopLossPercent === undefined ? "" : form.stopLossPercent}
-          onChange={(e) =>
-            onChange(
-              "stopLossPercent",
-              e.target.value === "" ? undefined : parseFloat(e.target.value) || 0
-            )
-          }
-        />
+        {form.strategyType !== "HIGH_LOW_BREAKOUT_REVERSAL" ? (
+          <>
+            <Input
+              label="Stop Loss (%)"
+              type="number"
+              placeholder="e.g. 5"
+              value={form.stopLossPercent === undefined ? "" : form.stopLossPercent}
+              onChange={(e) =>
+                onChange(
+                  "stopLossPercent",
+                  e.target.value === "" ? undefined : parseFloat(e.target.value) || 0
+                )
+              }
+            />
 
-        <Input
-          label="Target Profit (%)"
-          type="number"
-          placeholder="e.g. 10"
-          value={form.targetPercent === undefined ? "" : form.targetPercent}
-          onChange={(e) =>
-            onChange(
-              "targetPercent",
-              e.target.value === "" ? undefined : parseFloat(e.target.value) || 0
-            )
-          }
-        />
+            <Input
+              label="Target Profit (%)"
+              type="number"
+              placeholder="e.g. 10"
+              value={form.targetPercent === undefined ? "" : form.targetPercent}
+              onChange={(e) =>
+                onChange(
+                  "targetPercent",
+                  e.target.value === "" ? undefined : parseFloat(e.target.value) || 0
+                )
+              }
+            />
+          </>
+        ) : (
+          <Input
+            label="Target Reward Ratio"
+            type="number"
+            placeholder="3"
+            value={form.rewardRatio === undefined ? 3 : form.rewardRatio}
+            onChange={(e) =>
+              onChange(
+                "rewardRatio",
+                e.target.value === "" ? 3 : parseFloat(e.target.value) || 3
+              )
+            }
+          />
+        )}
       </div>
 
       <div className="bg-slate-900/40 border border-slate-850 rounded-xl p-4 space-y-2.5 mt-2">

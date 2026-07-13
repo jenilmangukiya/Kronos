@@ -1,4 +1,5 @@
 import { PriceBreakoutStrategy } from "./handlers/price-breakout.strategy.js";
+import { HighLowBreakoutReversalStrategy } from "./handlers/high-low-breakout-reversal.strategy.js";
 import type { StrategyHandler } from "./handlers/types.js";
 
 class StrategyRegistry {
@@ -6,7 +7,9 @@ class StrategyRegistry {
 
   constructor() {
     this.register(new PriceBreakoutStrategy());
+    this.register(new HighLowBreakoutReversalStrategy());
   }
+
 
   get(type: string) {
     return this.handlers.get(type);

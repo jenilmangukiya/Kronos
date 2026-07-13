@@ -28,6 +28,8 @@ export interface ReplayPosition {
   pnl: number;
   openedAt: Date;
   closedAt?: Date | null;
+  openedAtMarketTime?: number;
+  closedAtMarketTime?: number;
 }
 
 export interface ReplaySession {
@@ -54,10 +56,16 @@ export interface ReplaySession {
   maxLoss?: number;
   isPaused?: boolean;
   shouldStep?: boolean;
+  yesterdayHigh?: number;
+  yesterdayLow?: number;
+  optionCandles?: Map<string, ReplayCandle[]>;
 }
 
 export interface StartReplayInput {
   strategyId: string;
   brokerAccountId: string;
   speed?: number;
+  date?: string;
+  yesterdayHigh?: number;
+  yesterdayLow?: number;
 }

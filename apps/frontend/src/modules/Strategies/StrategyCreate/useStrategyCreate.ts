@@ -32,6 +32,9 @@ export const useStrategyCreate = () => {
     tradeStrike: "",
     tradeOptionType: "CE",
     tradeLots: 1,
+    strategyType: "PRICE_BREAKOUT",
+    squareOffTime: "15:15",
+    rewardRatio: 3,
   });
 
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -75,7 +78,7 @@ export const useStrategyCreate = () => {
     form.symbol,
     form.tradeExpiry || "",
     10,
-    { enabled: Boolean(brokerAccountId && isOption && form.tradeExpiry) }
+    { enabled: Boolean(brokerAccountId && isOption && form.tradeExpiry && form.strategyType !== "HIGH_LOW_BREAKOUT_REVERSAL") }
   );
 
   const underlyingToken = UNDERLYING_TOKENS[form.symbol]?.token;
@@ -98,23 +101,28 @@ export const useStrategyCreate = () => {
   const isSubmitDisabled = (() => {
     if (!form.name || !form.name.trim()) return true;
 
-    const config = getStrategyTypeConfig("PRICE_BREAKOUT");
+    const currentStrategyType = form.strategyType || "PRICE_BREAKOUT";
+    const config = getStrategyTypeConfig(currentStrategyType);
     if (config?.isFormValid && !config.isFormValid(form)) return true;
 
     if (form.maxTradesPerDay === undefined || form.maxTradesPerDay === null || (form.maxTradesPerDay as any) === "" || Number(form.maxTradesPerDay) < 1) return true;
     if (!form.reEntryMode) return true;
 
-    if (form.stopLossPercent !== undefined && form.stopLossPercent !== null && (form.stopLossPercent as any) !== "" && Number(form.stopLossPercent) <= 0) return true;
-    if (form.targetPercent !== undefined && form.targetPercent !== null && (form.targetPercent as any) !== "" && Number(form.targetPercent) <= 0) return true;
+    if (currentStrategyType !== "HIGH_LOW_BREAKOUT_REVERSAL") {
+      if (form.stopLossPercent !== undefined && form.stopLossPercent !== null && (form.stopLossPercent as any) !== "" && Number(form.stopLossPercent) <= 0) return true;
+      if (form.targetPercent !== undefined && form.targetPercent !== null && (form.targetPercent as any) !== "" && Number(form.targetPercent) <= 0) return true;
+    }
 
     if (form.instrumentType === "FUTURE") {
       if (!form.tradeToken || !form.tradeSymbol) return true;
       if (!form.tradeLots || Number(form.tradeLots) < 1) return true;
     } else if (form.instrumentType === "OPTION") {
       if (!form.tradeExpiry) return true;
-      if (!form.tradeStrike) return true;
-      if (!form.tradeOptionType) return true;
-      if (!form.tradeToken || !form.tradeSymbol) return true;
+      if (currentStrategyType !== "HIGH_LOW_BREAKOUT_REVERSAL") {
+        if (!form.tradeStrike) return true;
+        if (!form.tradeOptionType) return true;
+        if (!form.tradeToken || !form.tradeSymbol) return true;
+      }
       if (!form.tradeLots || Number(form.tradeLots) < 1) return true;
     } else {
       return true;
@@ -156,11 +164,11 @@ export const useStrategyCreate = () => {
         instrumentType: existingStrategy.instrumentType,
         mode: existingStrategy.mode,
         ruleType: existingStrategy.rules.type,
-        triggerPrice: existingStrategy.rules.triggerPrice,
+        triggerPrice: existingStrategy.rules.triggerPrice || 0,
         tradeSide: existingStrategy.trade.side,
         tradeQuantity: existingStrategy.trade.quantity,
-        tradeToken: existingStrategy.trade.token,
-        tradeSymbol: existingStrategy.trade.symbol,
+        tradeToken: existingStrategy.trade.token || "",
+        tradeSymbol: existingStrategy.trade.symbol || "",
         tradeExpiry: parsedExpiry,
         maxTradesPerDay: existingStrategy.risk?.maxTradesPerDay ?? 1,
         stopLossPercent: existingStrategy.risk?.stopLossPercent ?? undefined,
@@ -169,6 +177,9 @@ export const useStrategyCreate = () => {
         tradeStrike: parsedStrike,
         tradeOptionType: parsedOptionType,
         tradeLots: parsedLots,
+        strategyType: existingStrategy.strategyType || "PRICE_BREAKOUT",
+        squareOffTime: existingStrategy.rules.squareOffTime || "15:15",
+        rewardRatio: existingStrategy.risk?.rewardRatio ?? 3,
       };
 
       setForm(prefilledForm);
@@ -224,10 +235,16 @@ export const useStrategyCreate = () => {
       setValidationError("Strategy name is required");
       return;
     }
-    if (form.triggerPrice <= 0) {
-      setValidationError("Trigger price must be greater than 0");
-      return;
+
+    const currentStrategyType = form.strategyType || "PRICE_BREAKOUT";
+
+    if (currentStrategyType !== "HIGH_LOW_BREAKOUT_REVERSAL") {
+      if (form.triggerPrice <= 0) {
+        setValidationError("Trigger price must be greater than 0");
+        return;
+      }
     }
+
     if (form.maxTradesPerDay === undefined || form.maxTradesPerDay === null || (form.maxTradesPerDay as any) === "" || Number(form.maxTradesPerDay) < 1) {
       setValidationError("Max trades per day must be at least 1");
       return;
@@ -237,14 +254,16 @@ export const useStrategyCreate = () => {
       return;
     }
 
-    // Stop Loss / Target validation
-    if (form.stopLossPercent !== undefined && form.stopLossPercent !== null && (form.stopLossPercent as any) !== "" && Number(form.stopLossPercent) <= 0) {
-      setValidationError("Stop loss percent must be greater than 0 if filled");
-      return;
-    }
-    if (form.targetPercent !== undefined && form.targetPercent !== null && (form.targetPercent as any) !== "" && Number(form.targetPercent) <= 0) {
-      setValidationError("Target percent must be greater than 0 if filled");
-      return;
+    if (currentStrategyType !== "HIGH_LOW_BREAKOUT_REVERSAL") {
+      // Stop Loss / Target validation
+      if (form.stopLossPercent !== undefined && form.stopLossPercent !== null && (form.stopLossPercent as any) !== "" && Number(form.stopLossPercent) <= 0) {
+        setValidationError("Stop loss percent must be greater than 0 if filled");
+        return;
+      }
+      if (form.targetPercent !== undefined && form.targetPercent !== null && (form.targetPercent as any) !== "" && Number(form.targetPercent) <= 0) {
+        setValidationError("Target percent must be greater than 0 if filled");
+        return;
+      }
     }
 
     if (form.instrumentType === "OPTION") {
@@ -252,17 +271,19 @@ export const useStrategyCreate = () => {
         setValidationError("Option expiry is required");
         return;
       }
-      if (!form.tradeStrike) {
-        setValidationError("Strike price is required");
-        return;
-      }
-      if (!form.tradeOptionType) {
-        setValidationError("Option type is required");
-        return;
-      }
-      if (!form.tradeToken || !form.tradeSymbol) {
-        setValidationError("Option contract token is required");
-        return;
+      if (currentStrategyType !== "HIGH_LOW_BREAKOUT_REVERSAL") {
+        if (!form.tradeStrike) {
+          setValidationError("Strike price is required");
+          return;
+        }
+        if (!form.tradeOptionType) {
+          setValidationError("Option type is required");
+          return;
+        }
+        if (!form.tradeToken || !form.tradeSymbol) {
+          setValidationError("Option contract token is required");
+          return;
+        }
       }
       if (!form.tradeLots || Number(form.tradeLots) < 1) {
         setValidationError("Lots must be greater than or equal to 1");
@@ -287,31 +308,53 @@ export const useStrategyCreate = () => {
     const resolvedLotSize = form.instrumentType === "FUTURE" && futureContract ? futureContract.lotSize : lotSize;
     const quantity = (form.tradeLots || 0) * resolvedLotSize;
 
-    const config = getStrategyTypeConfig("PRICE_BREAKOUT");
+    const config = getStrategyTypeConfig(currentStrategyType);
     const rules = config?.buildRulesPayload ? config.buildRulesPayload(form) : {};
 
-    const body: CreateStrategyRequest = {
+    const tradePayload = currentStrategyType === "HIGH_LOW_BREAKOUT_REVERSAL"
+      ? {
+          instrumentType: "OPTION",
+          token: "",
+          symbol: "",
+          exchangeType: 2,
+          exchange: "NFO",
+          side: "BUY",
+          quantity: quantity,
+          expiry: form.tradeExpiry,
+        }
+      : {
+          instrumentType: form.instrumentType,
+          token: form.tradeToken,
+          symbol: form.tradeSymbol,
+          exchangeType: 2, // NFO exchangeType
+          exchange: "NFO",
+          side: form.tradeSide,
+          quantity: quantity,
+        };
+
+    const riskPayload = currentStrategyType === "HIGH_LOW_BREAKOUT_REVERSAL"
+      ? {
+          rewardRatio: Number(form.rewardRatio ?? 3),
+          maxTradesPerDay: Number(form.maxTradesPerDay),
+          reEntryMode: form.reEntryMode,
+        }
+      : {
+          maxTradesPerDay: Number(form.maxTradesPerDay),
+          stopLossPercent: form.stopLossPercent ? Number(form.stopLossPercent) : undefined,
+          targetPercent: form.targetPercent ? Number(form.targetPercent) : undefined,
+          reEntryMode: form.reEntryMode,
+        };
+
+    const body: any = {
       brokerAccountId,
       name: form.name,
       symbol: form.symbol,
+      strategyType: currentStrategyType,
       instrumentType: form.instrumentType,
       mode: "PAPER",
       rules,
-      trade: {
-        instrumentType: form.instrumentType,
-        token: form.tradeToken,
-        symbol: form.tradeSymbol,
-        exchangeType: 2, // NFO exchangeType
-        exchange: "NFO",
-        side: form.tradeSide,
-        quantity: quantity,
-      },
-      risk: {
-        maxTradesPerDay: Number(form.maxTradesPerDay),
-        stopLossPercent: form.stopLossPercent ? Number(form.stopLossPercent) : undefined,
-        targetPercent: form.targetPercent ? Number(form.targetPercent) : undefined,
-        reEntryMode: form.reEntryMode,
-      },
+      trade: tradePayload,
+      risk: riskPayload,
     };
 
     try {

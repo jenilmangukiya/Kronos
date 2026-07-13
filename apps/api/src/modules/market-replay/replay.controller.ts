@@ -87,6 +87,9 @@ export async function replayRoutes(app: FastifyInstance) {
           strategyId: z.string().min(1),
           brokerAccountId: z.string().min(1),
           speed: z.number().optional(),
+          date: z.string().optional(),
+          yesterdayHigh: z.number().optional(),
+          yesterdayLow: z.number().optional(),
         }),
         response: {
           200: z.any(),

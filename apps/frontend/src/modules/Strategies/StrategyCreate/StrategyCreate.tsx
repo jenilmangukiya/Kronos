@@ -70,7 +70,8 @@ export const StrategyCreate: React.FC = () => {
     ? (form.tradeLots || 0) * lotSize
     : Number(form.tradeQuantity);
 
-  const config = getStrategyTypeConfig("PRICE_BREAKOUT");
+  const currentStrategyType = form.strategyType || "PRICE_BREAKOUT";
+  const config = getStrategyTypeConfig(currentStrategyType);
   const rules = config?.buildRulesPayload ? config.buildRulesPayload(form) : {};
 
   const previewStrategy = {
@@ -78,20 +79,31 @@ export const StrategyCreate: React.FC = () => {
     userId: "preview",
     name: form.name || "Preview Strategy",
     symbol: form.symbol,
-    strategyType: "PRICE_BREAKOUT",
+    strategyType: currentStrategyType,
     instrumentType: form.instrumentType,
     mode: form.mode,
     status: "STOPPED",
     rules,
-    trade: {
-      instrumentType: form.instrumentType,
-      token: form.tradeToken,
-      symbol: form.tradeSymbol,
-      exchangeType: 2,
-      exchange: "NFO",
-      side: form.tradeSide,
-      quantity: quantity,
-    },
+    trade: currentStrategyType === "HIGH_LOW_BREAKOUT_REVERSAL"
+      ? {
+          instrumentType: "OPTION",
+          token: "",
+          symbol: "",
+          exchangeType: 2,
+          exchange: "NFO",
+          side: "BUY",
+          quantity: quantity,
+          expiry: form.tradeExpiry,
+        }
+      : {
+          instrumentType: form.instrumentType,
+          token: form.tradeToken,
+          symbol: form.tradeSymbol,
+          exchangeType: 2,
+          exchange: "NFO",
+          side: form.tradeSide,
+          quantity: quantity,
+        },
     risk: {
       maxTradesPerDay: Number(form.maxTradesPerDay),
       stopLossPercent: form.stopLossPercent ? Number(form.stopLossPercent) : undefined,

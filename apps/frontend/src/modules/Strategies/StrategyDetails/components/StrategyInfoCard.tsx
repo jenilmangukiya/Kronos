@@ -126,12 +126,12 @@ export const StrategyInfoCard: React.FC<StrategyInfoCardProps> = ({ strategy }) 
             <div className="col-span-1 sm:col-span-2 md:col-span-1 lg:col-span-2">
               <span className="text-slate-400 block font-medium">Execution Asset Symbol</span>
               <span className="text-indigo-400 font-mono text-[11px] font-semibold mt-0.5 block truncate" title={strategy.trade.symbol}>
-                {strategy.trade.symbol}
+                {strategy.trade.symbol || "Dynamic (ATM CE/PE selected at entry)"}
               </span>
             </div>
             <div>
               <span className="text-slate-400 block font-medium">Token ID</span>
-              <span className="text-slate-300 font-mono mt-0.5 block">{strategy.trade.token}</span>
+              <span className="text-slate-300 font-mono mt-0.5 block">{strategy.trade.token || "Dynamic"}</span>
             </div>
             <div>
               <span className="text-slate-400 block font-medium">Exchange</span>
@@ -155,18 +155,29 @@ export const StrategyInfoCard: React.FC<StrategyInfoCardProps> = ({ strategy }) 
                 {strategy.risk?.maxTradesPerDay ?? 1}
               </span>
             </div>
-            <div>
-              <span className="text-slate-400 block font-medium">Stop Loss %</span>
-              <span className="text-rose-400 font-semibold mt-0.5 block">
-                {strategy.risk?.stopLossPercent ? `${strategy.risk.stopLossPercent}%` : "None"}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 block font-medium">Target %</span>
-              <span className="text-emerald-400 font-semibold mt-0.5 block">
-                {strategy.risk?.targetPercent ? `${strategy.risk.targetPercent}%` : "None"}
-              </span>
-            </div>
+            {strategy.strategyType === "HIGH_LOW_BREAKOUT_REVERSAL" ? (
+              <div>
+                <span className="text-slate-400 block font-medium">Target Reward Ratio</span>
+                <span className="text-emerald-400 font-semibold mt-0.5 block font-bold">
+                  {strategy.risk?.rewardRatio ? `${strategy.risk.rewardRatio}x Risk` : "3x Risk"}
+                </span>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <span className="text-slate-400 block font-medium">Stop Loss %</span>
+                  <span className="text-rose-400 font-semibold mt-0.5 block">
+                    {strategy.risk?.stopLossPercent ? `${strategy.risk.stopLossPercent}%` : "None"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-medium">Target %</span>
+                  <span className="text-emerald-400 font-semibold mt-0.5 block">
+                    {strategy.risk?.targetPercent ? `${strategy.risk.targetPercent}%` : "None"}
+                  </span>
+                </div>
+              </>
+            )}
             <div>
               <span className="text-slate-400 block font-medium">Re-entry Mode</span>
               <span className="text-blue-400 font-semibold mt-0.5 block">

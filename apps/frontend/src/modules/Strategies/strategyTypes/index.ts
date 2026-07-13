@@ -1,5 +1,6 @@
 import React from "react";
 import { PriceBreakoutConfig } from "./priceBreakout.config";
+import { HighLowBreakoutReversalConfig } from "./highLowBreakoutReversal.config";
 
 export interface StrategyTypeConfig {
   strategyType: string;
@@ -18,6 +19,8 @@ export interface StrategyTypeConfig {
   RuntimeSignalComponent?: React.FC<{
     runtimeStatus: any;
     strategy: any;
+    candles?: any[];
+    positions?: any[];
   }>;
   getSummaryText: (strategy: any) => string;
   buildRulesPayload: (form: any) => any;
@@ -26,6 +29,7 @@ export interface StrategyTypeConfig {
 
 const registry: Record<string, StrategyTypeConfig> = {
   PRICE_BREAKOUT: PriceBreakoutConfig as StrategyTypeConfig,
+  HIGH_LOW_BREAKOUT_REVERSAL: HighLowBreakoutReversalConfig as StrategyTypeConfig,
 };
 
 export const getStrategyTypeConfig = (type: string): StrategyTypeConfig | undefined => {

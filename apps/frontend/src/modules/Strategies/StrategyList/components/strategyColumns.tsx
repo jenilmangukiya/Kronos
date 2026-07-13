@@ -6,7 +6,20 @@ import { Badge } from "../../../../components/ui/Badge";
 import { Button } from "../../../../components/ui/Button";
 
 const formatTriggerRule = (strategy: Strategy) => {
-  const { type, triggerPrice } = strategy.rules;
+  if (strategy.strategyType === "HIGH_LOW_BREAKOUT_REVERSAL") {
+    return (
+      <div className="flex flex-col text-xs text-slate-300">
+        <span className="font-semibold text-slate-200">
+          Yesterday's High/Low Breakout
+        </span>
+        <span className="text-slate-400">
+          Timeframe: {strategy.rules?.timeframe || "5m"}
+        </span>
+      </div>
+    );
+  }
+
+  const { type, triggerPrice } = strategy.rules || {};
   const isAbove = type === "UNDERLYING_CROSS_ABOVE";
   return (
     <div className="flex flex-col text-xs text-slate-300">
@@ -14,25 +27,28 @@ const formatTriggerRule = (strategy: Strategy) => {
         Spot {isAbove ? "Crosses Above" : "Crosses Below"}
       </span>
       <span className="text-slate-400">
-        Price: ₹{triggerPrice.toLocaleString("en-IN")}
+        Price: {triggerPrice !== undefined && triggerPrice !== null ? `₹${triggerPrice.toLocaleString("en-IN")}` : "-"}
       </span>
     </div>
   );
 };
 
 const formatTradeDetails = (strategy: Strategy) => {
-  const { side, quantity, symbol } = strategy.trade;
+  const { side, quantity, symbol } = strategy.trade || {};
   const isBuy = side === "BUY";
+  const displaySymbol = symbol || strategy.symbol || "";
+  const isReversal = strategy.strategyType === "HIGH_LOW_BREAKOUT_REVERSAL";
+
   return (
     <div className="flex flex-col text-xs">
       <div className="flex items-center gap-1.5">
         <Badge variant={isBuy ? "success" : "danger"} className="!px-1.5 !py-0 text-[10px]">
-          {side}
+          {side || "BUY"}
         </Badge>
-        <span className="font-semibold text-slate-200">{quantity} units</span>
+        <span className="font-semibold text-slate-200">{quantity || 0} units</span>
       </div>
-      <span className="text-slate-400 mt-0.5 truncate max-w-[200px]" title={symbol}>
-        {symbol}
+      <span className="text-slate-400 mt-0.5 truncate max-w-[200px]" title={displaySymbol}>
+        {displaySymbol} {isReversal && "(ATM Option)"}
       </span>
     </div>
   );

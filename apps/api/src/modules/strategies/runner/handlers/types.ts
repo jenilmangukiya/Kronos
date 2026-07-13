@@ -30,6 +30,7 @@ export interface StrategyContext {
     risk: unknown;
     state?: unknown;
   };
+  isReplay?: boolean;
 }
 
 export interface StrategyDecision {
@@ -51,4 +52,6 @@ export interface StrategyHandler {
   evaluateEntry(context: StrategyContext): Promise<StrategyDecision>;
   evaluateExit?(context: StrategyContext & { position: any }): Promise<StrategyDecision>;
   getRuntimeStatus?(context: StrategyContext): Promise<Record<string, any>> | Record<string, any>;
+  execute?(context: StrategyContext): Promise<void>;
 }
+

@@ -52,9 +52,9 @@ export interface Strategy {
   instrumentType: StrategyInstrumentType;
   mode: StrategyMode;
   status: StrategyStatus;
-  rules: StrategyRules;
-  trade: StrategyTrade;
-  risk?: StrategyRisk;
+  rules: any;
+  trade: any;
+  risk?: any;
   lastTriggeredAt?: string | null;
   state?: Record<string, unknown> | null;
   createdAt: string;
@@ -65,11 +65,12 @@ export interface CreateStrategyRequest {
   brokerAccountId?: string;
   name: string;
   symbol: string;
+  strategyType?: string;
   instrumentType: StrategyInstrumentType;
   mode: StrategyMode;
-  rules: StrategyRules;
-  trade: StrategyTrade;
-  risk?: StrategyRisk;
+  rules: any;
+  trade: any;
+  risk?: any;
 }
 
 export interface StrategyLog {

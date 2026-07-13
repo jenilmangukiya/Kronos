@@ -117,7 +117,7 @@ export const StrategyDetails: React.FC = () => {
   const openPosition = openPositions[0];
 
   const priceLines: PriceLine[] = [];
-  if (openPosition) {
+  if (openPosition && strategy.strategyType !== "HIGH_LOW_BREAKOUT_REVERSAL") {
     const avgPrice = openPosition.avgPrice;
     const sideFormatted = formatTradeSide(openPosition.side);
     const isLong = sideFormatted === "BUY";
@@ -153,6 +153,27 @@ export const StrategyDetails: React.FC = () => {
         title: "SL",
         color: "#ef4444", // red-500
       });
+    }
+  }
+
+  // Draw Reference High and Reference Low lines for HIGH_LOW_BREAKOUT_REVERSAL
+  if (strategy.strategyType === "HIGH_LOW_BREAKOUT_REVERSAL") {
+    const state = strategy.state as any;
+    if (state) {
+      if (state.putTrack && state.putTrack.referenceHigh !== undefined && state.putTrack.referenceHigh !== null) {
+        priceLines.push({
+          price: state.putTrack.referenceHigh,
+          title: "Ref High (PUT)",
+          color: "#f87171", // red-400
+        });
+      }
+      if (state.callTrack && state.callTrack.referenceLow !== undefined && state.callTrack.referenceLow !== null) {
+        priceLines.push({
+          price: state.callTrack.referenceLow,
+          title: "Ref Low (CALL)",
+          color: "#4ade80", // green-400
+        });
+      }
     }
   }
 
@@ -643,7 +664,12 @@ export const StrategyDetails: React.FC = () => {
 
                   {strategyConfig?.RuntimeSignalComponent && (
                     <div className="border-t border-slate-800/80 pt-2 mt-2">
-                      <strategyConfig.RuntimeSignalComponent runtimeStatus={runtimeStatus} strategy={strategy} />
+                      <strategyConfig.RuntimeSignalComponent
+                        runtimeStatus={runtimeStatus}
+                        strategy={strategy}
+                        candles={candles}
+                        positions={positions}
+                      />
                     </div>
                   )}
                 </div>

@@ -17,6 +17,8 @@ interface ReplayPosition {
   side: "LONG" | "SHORT";
   realizedPnl: number;
   pnl: number;
+  openedAtMarketTime?: number;
+  closedAtMarketTime?: number;
 }
 
 interface ReplayLog {
@@ -69,12 +71,13 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
   };
 
   const formatTime = (ts: number | string | null | undefined): string => {
-    if (!ts) return "--:--";
+    if (!ts) return "--:--:--";
     const date = new Date(Number(ts) * 1000);
     return date.toLocaleTimeString("en-IN", {
       timeZone: "Asia/Kolkata",
       hour: "2-digit",
       minute: "2-digit",
+      second: "2-digit",
       hour12: false,
     });
   };
@@ -85,9 +88,173 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDebugMode, setIsDebugMode] = useState(false);
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const logContainerRef = useRef<HTMLDivElement | null>(null);
   const prevLogsLengthRef = useRef(0);
+
+  const [showCandles, setShowCandles] = useState(true);
+  const [showChecks, setShowChecks] = useState(true);
+  const [showEntries, setShowEntries] = useState(true);
+
+  const parseLog = (log: ReplayLog) => {
+    const match = log.message.match(/^\[(\d{2}:\d{2}:\d{2})\]\s*([\s\S]*)$/);
+    let timeStr = "";
+    let messageBody = log.message;
+
+    if (match) {
+      timeStr = match[1] || "";
+      messageBody = match[2] || "";
+    } else if (log.createdAt) {
+      try {
+        timeStr = new Date(log.createdAt).toLocaleTimeString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        });
+      } catch {}
+    }
+
+    let tagText = "LOG";
+    let content = messageBody.trim();
+    let tagType: "candle" | "checkA" | "detect" | "waiting" | "candleBStart" | "checkB" | "entry" | "exit" | "failed" | "other" = "other";
+
+    if (messageBody.includes("[CANDLE]")) {
+      tagText = "CANDLE";
+      tagType = "candle";
+      content = messageBody.replace("[CANDLE] ", "").replace("[CANDLE]", "").trim();
+    } else if (messageBody.includes("[CHECK A]")) {
+      tagText = "CHECK A";
+      tagType = "checkA";
+      content = messageBody.replace("[CHECK A] ", "").replace("[CHECK A]", "").trim();
+    } else if (messageBody.includes("[CANDLE A DETECTED]")) {
+      tagText = "CANDLE A DETECTED";
+      tagType = "detect";
+      content = messageBody.replace("[CANDLE A DETECTED] ", "").replace("[CANDLE A DETECTED]", "").trim();
+    } else if (messageBody.includes("[WAITING]")) {
+      tagText = "WAITING";
+      tagType = "waiting";
+      content = messageBody.replace("[WAITING] ", "").replace("[WAITING]", "").trim();
+    } else if (messageBody.includes("[CANDLE B START]")) {
+      tagText = "CANDLE B START";
+      tagType = "candleBStart";
+      content = messageBody.replace("[CANDLE B START] ", "").replace("[CANDLE B START]", "").trim();
+    } else if (messageBody.includes("[CHECK B]")) {
+      tagText = "CHECK B";
+      tagType = "checkB";
+      content = messageBody.replace("[CHECK B] ", "").replace("[CHECK B]", "").trim();
+    } else if (messageBody.includes("[EXIT]")) {
+      tagText = "EXIT";
+      tagType = "exit";
+      content = messageBody.replace("[EXIT] ", "").replace("[EXIT]", "").trim();
+    } else if (messageBody.includes("[ENTRY]")) {
+      tagText = "ENTRY";
+      tagType = "entry";
+      content = messageBody.replace("[ENTRY] ", "").replace("[ENTRY]", "").trim();
+    } else if (messageBody.includes("[FAILED]")) {
+      tagText = "FAILED";
+      tagType = "failed";
+      content = messageBody.replace("[FAILED] ", "").replace("[FAILED]", "").trim();
+    } else if (messageBody.includes("[REFERENCE]")) {
+      tagText = "REFERENCE";
+      tagType = "checkA";
+      content = messageBody.replace("[REFERENCE] ", "").replace("[REFERENCE]", "").trim();
+    } else if (messageBody.includes("[STATE]")) {
+      tagText = "STATE";
+      tagType = "checkA";
+      content = messageBody.replace("[STATE] ", "").replace("[STATE]", "").trim();
+    } else if (messageBody.includes("[START]")) {
+      tagText = "START";
+      tagType = "other";
+      content = messageBody.replace("[START] ", "").replace("[START]", "").trim();
+    } else if (messageBody.includes("[END]")) {
+      tagText = "END";
+      tagType = "other";
+      content = messageBody.replace("[END] ", "").replace("[END]", "").trim();
+    } else {
+      if (messageBody.includes("Exited") || messageBody.includes("square-off") || messageBody.includes("Stop Loss hit") || messageBody.includes("Target hit")) {
+        tagText = "EXIT";
+        tagType = "exit";
+      } else if (messageBody.includes("triggered") || messageBody.includes("Entered")) {
+        tagText = "ENTRY";
+        tagType = "entry";
+      } else if (messageBody.includes("Pattern failed")) {
+        tagText = "FAILED";
+        tagType = "failed";
+      }
+    }
+
+    return { timeStr, tagText, tagType, content };
+  };
+
+  const getLogStyle = (tagType: string) => {
+    switch (tagType) {
+      case "candle":
+        return {
+          textColorClass: "text-slate-400 font-normal text-[10px]",
+          bgClass: "bg-slate-950/40",
+          borderClass: "border-slate-800/40",
+          tagColor: "bg-slate-900/60 text-slate-400 border-slate-800/40",
+        };
+      case "checkA":
+      case "checkB":
+        return {
+          textColorClass: "text-blue-400 font-normal text-[10px]",
+          bgClass: "bg-blue-500/5",
+          borderClass: "border-blue-500/20",
+          tagColor: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+        };
+      case "detect":
+        return {
+          textColorClass: "text-yellow-400 font-bold text-xs leading-normal",
+          bgClass: "bg-yellow-500/5",
+          borderClass: "border-yellow-500/20",
+          tagColor: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+        };
+      case "waiting":
+        return {
+          textColorClass: "text-orange-400 font-normal text-[10px]",
+          bgClass: "bg-orange-500/5",
+          borderClass: "border-orange-500/20",
+          tagColor: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+        };
+      case "candleBStart":
+        return {
+          textColorClass: "text-blue-400 font-semibold text-[10px]",
+          bgClass: "bg-blue-500/5",
+          borderClass: "border-blue-500/20",
+          tagColor: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+        };
+      case "entry":
+        return {
+          textColorClass: "text-emerald-400 font-bold text-xs leading-normal",
+          bgClass: "bg-emerald-500/5",
+          borderClass: "border-emerald-500/20",
+          tagColor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+        };
+      case "exit":
+        return {
+          textColorClass: "text-rose-400 font-bold text-xs leading-normal",
+          bgClass: "bg-rose-500/5",
+          borderClass: "border-rose-500/20",
+          tagColor: "bg-rose-500/20 text-rose-400 border-rose-500/30",
+        };
+      case "failed":
+        return {
+          textColorClass: "text-rose-400 font-bold text-xs leading-normal",
+          bgClass: "bg-rose-500/5",
+          borderClass: "border-rose-500/20",
+          tagColor: "bg-rose-500/20 text-rose-400 border-rose-500/30",
+        };
+      default:
+        return {
+          textColorClass: "text-slate-300 font-normal text-[10px]",
+          bgClass: "bg-slate-900/20",
+          borderClass: "border-slate-800/40",
+          tagColor: "bg-slate-850 text-slate-400 border border-slate-800/40",
+        };
+    }
+  };
 
   // Console logging inside debug mode
   useEffect(() => {
@@ -119,43 +286,42 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
       const response = await axiosAuth.get<ReplaySession>("/replay/session");
       if (response.data) {
         setSession(response.data);
-        if (!response.data.isRunning && pollingRef.current) {
-          clearInterval(pollingRef.current);
-          pollingRef.current = null;
-        }
       } else {
-        // No active session
         setSession(null);
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current);
-          pollingRef.current = null;
-        }
       }
     } catch (err) {
-      // 404 is expected when there is no active session
       setSession(null);
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
     }
   };
 
-  // Initial check on mount
+  // Declarative polling effect depending on running status
   useEffect(() => {
     pollSession();
+
+    // Fast poll (2000ms) when running, slow poll (5000ms) when paused or stopped
+    const intervalTime = session?.isRunning ? 2000 : 5000;
+    const interval = setInterval(pollSession, intervalTime);
+
     return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
+      clearInterval(interval);
     };
-  }, []);
+  }, [session?.isRunning]);
+
+  const filteredLogs = session
+    ? session.logs.filter((log) => {
+        const { tagType } = parseLog(log);
+        if (tagType === "candle" && !showCandles) return false;
+        if ((tagType === "checkA" || tagType === "checkB") && !showChecks) return false;
+        if ((tagType === "detect" || tagType === "waiting" || tagType === "candleBStart" || tagType === "entry" || tagType === "exit" || tagType === "failed") && !showEntries) return false;
+        return true;
+      })
+    : [];
 
   // Scroll to bottom of logs when they change (only if near bottom or first load)
   useEffect(() => {
     if (logContainerRef.current) {
       const container = logContainerRef.current;
-      const logsCount = session?.logs?.length ?? 0;
+      const logsCount = filteredLogs.length;
       const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 60;
       const isFirstLoad = prevLogsLengthRef.current === 0 && logsCount > 0;
 
@@ -164,7 +330,7 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
       }
       prevLogsLengthRef.current = logsCount;
     }
-  }, [session?.logs]);
+  }, [filteredLogs]);
 
   // Handle Start Replay
   const handleStart = async () => {
@@ -180,6 +346,7 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
         strategyId,
         brokerAccountId,
         speed,
+        date,
       });
 
       // 2. Fetch Historical Candles
@@ -191,11 +358,7 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
         },
       });
 
-      // 3. Start Polling
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
-      pollingRef.current = setInterval(pollSession, 500);
+      // 3. Update status immediately
       await pollSession();
     } catch (err: any) {
       console.error(err);
@@ -215,10 +378,6 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
     setError(null);
     try {
       await axiosAuth.post("/replay/stop");
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
       setSession(null);
     } catch (err: any) {
       setError(err?.response?.data?.error?.message || "Failed to stop replay.");
@@ -637,8 +796,28 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
                               </span>
                             </td>
                             <td className="py-2 px-1 text-slate-300 font-semibold">{pos.quantity}</td>
-                            <td className="py-2 px-1 text-slate-400">{formatCurrency(pos.entryPrice)}</td>
-                            <td className="py-2 px-1 text-slate-400">{exitPrice ? formatCurrency(exitPrice) : "-"}</td>
+                            <td className="py-2 px-1 text-slate-400">
+                               <div>{formatCurrency(pos.entryPrice)}</div>
+                               {pos.openedAtMarketTime && (
+                                 <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                                   {formatTime(pos.openedAtMarketTime)}
+                                 </div>
+                               )}
+                             </td>
+                             <td className="py-2 px-1 text-slate-400">
+                               {exitPrice ? (
+                                 <>
+                                   <div>{formatCurrency(exitPrice)}</div>
+                                   {pos.closedAtMarketTime && (
+                                     <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                                       {formatTime(pos.closedAtMarketTime)}
+                                     </div>
+                                   )}
+                                 </>
+                               ) : (
+                                 "-"
+                               )}
+                             </td>
                             <td className="py-2 px-1 text-slate-300 font-semibold">{formatCurrency(ltp)}</td>
                             <td className={`py-2 px-1 text-right font-black ${actualPnL > 0 ? "text-emerald-400" : actualPnL < 0 ? "text-rose-400" : "text-slate-400"}`}>
                               {formatCurrency(actualPnL)}
@@ -716,7 +895,7 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
             <h4 className="text-xs font-black text-slate-200 uppercase tracking-widest flex items-center justify-between border-b border-slate-900 pb-2">
               <span className="flex items-center gap-2">
                 <Terminal className="h-3.5 w-3.5 text-amber-500" />
-                Replay Logs ({session.logs.length})
+                Replay Logs ({filteredLogs.length}/{session.logs.length})
               </span>
               <button
                 onClick={pollSession}
@@ -727,69 +906,61 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
               </button>
             </h4>
 
-            {session.logs.length === 0 ? (
-              <div className="text-center py-16 text-slate-500 text-xs italic flex-1">
-                No logs recorded yet.
+            {/* Filter Checkboxes */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[9px] uppercase font-black text-slate-500 select-none pb-2 border-b border-slate-900">
+              <label className="flex items-center gap-1.5 cursor-pointer hover:text-slate-300 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showCandles}
+                  onChange={(e) => setShowCandles(e.target.checked)}
+                  className="rounded border-slate-800 bg-slate-900 text-amber-500 focus:ring-0 focus:ring-offset-0 h-3 w-3 cursor-pointer"
+                />
+                Show Candle Logs
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer hover:text-slate-300 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showChecks}
+                  onChange={(e) => setShowChecks(e.target.checked)}
+                  className="rounded border-slate-800 bg-slate-900 text-amber-500 focus:ring-0 focus:ring-offset-0 h-3 w-3 cursor-pointer"
+                />
+                Show Check Logs
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer hover:text-slate-300 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showEntries}
+                  onChange={(e) => setShowEntries(e.target.checked)}
+                  className="rounded border-slate-800 bg-slate-900 text-amber-500 focus:ring-0 focus:ring-offset-0 h-3 w-3 cursor-pointer"
+                />
+                Show Entry Logs
+              </label>
+            </div>
+
+            {filteredLogs.length === 0 ? (
+              <div className="text-center py-16 text-slate-500 text-xs italic flex-1 flex items-center justify-center">
+                No logs matching filters.
               </div>
             ) : (
               <div ref={logContainerRef} className="flex-1 overflow-y-auto font-mono text-[10px] space-y-2 pr-2 custom-scrollbar bg-slate-950/80 border border-slate-900 p-3 rounded-lg leading-relaxed">
-                {session.logs.map((log) => {
-                  const isTargetHit = log.message.includes("Target hit");
-                  const isSLHit = log.message.includes("Stop Loss hit");
-                  const isEntrySignal = log.message.includes("Entry Signal");
-                  const isEntered = log.message.includes("Entered");
-                  const isExited = log.message.includes("Exited");
-
-                  let colorClass = "text-slate-300";
-                  let bgClass = "bg-slate-900/20";
-                  let borderClass = "border-slate-800/40";
-                  let tagText = "LOG";
-                  let tagColor = "bg-slate-850 text-slate-400 border border-slate-800/40";
-
-                  if (isTargetHit) {
-                    colorClass = "text-emerald-400 font-bold";
-                    bgClass = "bg-emerald-500/5";
-                    borderClass = "border-emerald-500/20";
-                    tagText = "TARGET HIT";
-                    tagColor = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
-                  } else if (isSLHit) {
-                    colorClass = "text-rose-400 font-bold";
-                    bgClass = "bg-rose-500/5";
-                    borderClass = "border-rose-500/20";
-                    tagText = "STOP LOSS";
-                    tagColor = "bg-rose-500/20 text-rose-400 border border-rose-500/30";
-                  } else if (isEntrySignal) {
-                    colorClass = "text-indigo-400 font-medium";
-                    bgClass = "bg-indigo-500/5";
-                    borderClass = "border-indigo-500/20";
-                    tagText = "SIGNAL";
-                    tagColor = "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30";
-                  } else if (isEntered) {
-                    colorClass = "text-blue-400 font-semibold";
-                    bgClass = "bg-blue-500/5";
-                    borderClass = "border-blue-500/20";
-                    tagText = "ENTRY";
-                    tagColor = "bg-blue-500/20 text-blue-400 border border-blue-500/30";
-                  } else if (isExited) {
-                    const hasLoss = log.message.includes("PnL: -") || log.message.includes("PnL: ₹-");
-                    colorClass = hasLoss ? "text-rose-400 font-semibold" : "text-emerald-400 font-semibold";
-                    bgClass = "bg-slate-900/40";
-                    borderClass = "border-slate-800/60";
-                    tagText = "EXIT";
-                    tagColor = hasLoss
-                      ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
-                      : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
-                  }
+                {filteredLogs.map((log) => {
+                  const { timeStr, tagText, tagType, content } = parseLog(log);
+                  const { textColorClass, bgClass, borderClass, tagColor } = getLogStyle(tagType);
 
                   return (
                     <div
                       key={log.id}
-                      className={`flex items-start md:items-center gap-2.5 p-2 rounded-lg border ${bgClass} ${borderClass} transition-all duration-150`}
+                      className={`flex items-start gap-2.5 p-2 rounded-lg border ${bgClass} ${borderClass} transition-all duration-150`}
                     >
+                      {timeStr ? (
+                        <span className="text-[10px] text-slate-500 font-mono shrink-0 select-none">
+                          {timeStr} —
+                        </span>
+                      ) : null}
                       <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${tagColor} select-none`}>
                         {tagText}
                       </span>
-                      <span className={`flex-1 break-all font-mono text-[10px] ${colorClass}`}>{log.message}</span>
+                      <span className={`flex-1 break-all font-mono ${textColorClass}`}>{content}</span>
                     </div>
                   );
                 })}

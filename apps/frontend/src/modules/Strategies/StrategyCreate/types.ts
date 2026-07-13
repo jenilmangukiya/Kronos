@@ -19,4 +19,7 @@ export interface StrategyFormValues {
   tradeStrike?: string;
   tradeOptionType?: "CE" | "PE";
   tradeLots?: number;
+  strategyType?: string;
+  squareOffTime?: string;
+  rewardRatio?: number;
 }

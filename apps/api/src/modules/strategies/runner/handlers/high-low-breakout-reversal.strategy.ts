@@ -16,6 +16,7 @@ let ReplayPaperService: any = null;
 let ReplayServiceClass: any = null;
 let getOptionPriceAtTimeFn: any = null;
 let liveMarketDataService: any = null;
+let realtimeService: any = null;
 
 async function loadDeps() {
   if (!replaySessions) {
@@ -31,6 +32,10 @@ async function loadDeps() {
   if (!liveMarketDataService) {
     const mod = await import("../../../market-data/live/live-market-data.service.js");
     liveMarketDataService = mod.liveMarketDataService;
+  }
+  if (!realtimeService) {
+    const mod = await import("../../../realtime/realtime.service.js");
+    realtimeService = mod.realtimeService;
   }
 }
 
@@ -372,6 +377,65 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
 
     // Load or initialize state
     let state = (context.strategy.state as any) || {};
+
+    if (state.isSubscribed === undefined) {
+      state.isSubscribed = false;
+      state.isDataReady = false;
+      state.subscriptionStartTime = 0;
+      await updateStrategyState(context, state);
+    }
+
+    if (!state.isSubscribed) {
+      const subscriptions = this.getRequiredSubscriptions(context.strategy);
+      if (!isReplay) {
+        liveMarketDataService.subscribe(context.strategy.userId, brokerAccountId, subscriptions as any);
+      }
+      state.isSubscribed = true;
+      state.subscriptionStartTime = Date.now();
+      await updateStrategyState(context, state);
+      await addStrategyLog(context, "[SUBSCRIBE] Request sent");
+    }
+
+    if (!state.isDataReady) {
+      const tick = liveTickStore.getTick(brokerAccountId, underlyingToken);
+      if (tick && tick.ltp !== undefined && tick.ltp !== null) {
+        state.isDataReady = true;
+        await updateStrategyState(context, state);
+        await addStrategyLog(context, "[READY] Data received, strategy active");
+      } else {
+        const elapsed = Date.now() - state.subscriptionStartTime;
+        if (elapsed > 10000) {
+          await addStrategyLog(context, "[ERROR] Subscription failed");
+          if (isReplay) {
+            const session = replaySessions.get(context.strategy.userId);
+            if (session) {
+              session.isRunning = false;
+            }
+          } else {
+            await context.app.db.strategy.update({
+              where: { id: context.strategy.id },
+              data: { status: "STOPPED" },
+            });
+            try {
+              const subscriptions = this.getRequiredSubscriptions(context.strategy);
+              liveMarketDataService.unsubscribe(context.strategy.userId, brokerAccountId, subscriptions as any);
+              await addStrategyLog(context, "Live market data unsubscribed");
+            } catch {}
+            await addStrategyLog(context, "Strategy stopped");
+            realtimeService.publishStrategyDataChanged(context.strategy.id, [
+              "logs",
+              "strategy",
+              "runtime",
+            ]);
+          }
+          return;
+        }
+      }
+    }
+
+    if (!state.isDataReady) {
+      return;
+    }
     if (!state.putTrack || !state.callTrack) {
       let yesterdayHigh = 0;
       let yesterdayLow = 0;

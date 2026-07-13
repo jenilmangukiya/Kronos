@@ -379,6 +379,14 @@ export class ReplayService {
       return;
     }
 
+    // Reset readiness state flags for replay session
+    if (strategy.state) {
+      const state = strategy.state as any;
+      state.isSubscribed = false;
+      state.isDataReady = false;
+      state.subscriptionStartTime = 0;
+    }
+
     const rules = strategy.rules as any;
     const trade = strategy.trade as any;
     const underlyingToken = rules?.underlyingToken || trade?.token;

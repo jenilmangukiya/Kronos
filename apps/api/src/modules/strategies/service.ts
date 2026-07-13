@@ -218,11 +218,20 @@ export class StrategyService {
       },
     });
 
+    const currentState = (strategy.state || {}) as any;
+    const newState = {
+      ...currentState,
+      isSubscribed: false,
+      isDataReady: false,
+      subscriptionStartTime: 0,
+    };
+
     const updated = await this.db.strategy.update({
       where: { id: strategy.id },
       data: {
         status: "RUNNING",
         lastTriggeredAt: openPosition ? strategy.lastTriggeredAt : null,
+        state: newState,
       },
     });
 

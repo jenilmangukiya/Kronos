@@ -39,6 +39,18 @@ async function loadDeps() {
   }
 }
 
+function getKolkataDateStr(date: Date): string {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(date);
+  const getVal = (type: string) => parts.find((p) => p.type === type)?.value || "";
+  return `${getVal("year")}-${getVal("month")}-${getVal("day")}`;
+}
+
 // Helper: check if currentTime is past EOD square-off time (e.g. 15:15) in Asia/Kolkata timezone
 function isPastSquareOffTime(currentTime: Date, squareOffTimeStr?: string): boolean {
   const squareOffStr = squareOffTimeStr || "15:15";
@@ -401,6 +413,14 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
     // Load or initialize state
     let state = (context.strategy.state as any) || {};
 
+    const todayStr = getKolkataDateStr(currentTime);
+    if (!state.todayStr || state.todayStr !== todayStr) {
+      state.putTrack = undefined;
+      state.callTrack = undefined;
+      state.todayStr = todayStr;
+      await updateStrategyState(context, state);
+    }
+
     if (state.isSubscribed === undefined) {
       state.isSubscribed = false;
       state.isDataReady = false;
@@ -465,8 +485,12 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
 
       try {
         if (isReplay) {
-          yesterdayHigh = replaySession?.yesterdayHigh ?? 24000;
-          yesterdayLow = replaySession?.yesterdayLow ?? 23800;
+          if (!replaySession?.yesterdayHigh || !replaySession?.yesterdayLow) {
+            context.app.log.warn("Replay session is missing yesterday's High/Low.");
+            return;
+          }
+          yesterdayHigh = replaySession.yesterdayHigh;
+          yesterdayLow = replaySession.yesterdayLow;
         } else {
           const yesterday = await getYesterdayHighLow(
             context.app,
@@ -479,13 +503,19 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
           yesterdayLow = yesterday.low;
         }
       } catch (err: any) {
-        context.app.log.warn(err, `Failed to fetch yesterday's High/Low. Using baseline fallbacks.`);
-        // Fallbacks based on typical index prices
-        yesterdayHigh = 24000;
-        yesterdayLow = 23800;
+        context.app.log.warn(err, `Failed to fetch yesterday's High/Low. Will retry on next tick.`);
+        const now = Date.now();
+        const lastLogged = state.lastLoggedErrorTime || 0;
+        if (now - lastLogged > 60 * 1000) {
+          state.lastLoggedErrorTime = now;
+          await updateStrategyState(context, state);
+          await addStrategyLog(context, `[WARNING] Failed to fetch yesterday's High/Low: ${err.message}. Retrying...`);
+        }
+        return;
       }
 
       state = {
+        ...state,
         lastLoggedCandleTime: 0,
         putTrack: {
           referenceHigh: yesterdayHigh,
@@ -509,6 +539,11 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
         },
       };
       await updateStrategyState(context, state);
+      await addStrategyLog(context, `[INIT] Yesterday High: ${yesterdayHigh}, Low: ${yesterdayLow}`);
+    }
+
+    if (!state.putTrack || !state.callTrack) {
+      return;
     }
 
     // 1. EOD Square-off Check
@@ -656,6 +691,11 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
     const lastCandle = closedCandles[closedCandles.length - 1];
     const tick = liveTickStore.getTick(brokerAccountId, underlyingToken);
     const underlyingLtp = tick?.ltp ?? lastCandle.close;
+
+    // Ensure data readiness
+    if (!underlyingLtp || !lastCandle) {
+      return;
+    }
 
     const nowSec = currentTime.getTime() / 1000;
     const currentCandleTime = Math.floor(nowSec / 300) * 300;

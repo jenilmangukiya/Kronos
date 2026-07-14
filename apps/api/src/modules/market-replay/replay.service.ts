@@ -3,7 +3,7 @@ import { replaySessions } from "./replay.session.js";
 import { ReplaySession, StartReplayInput, ReplayCandle, ReplayPosition, ReplayLog } from "./replay.types.js";
 import { AppError } from "../../errors/app-error.js";
 import { AngelMarketDataProvider } from "../market-data/providers/angel.provider.js";
-import { AngelInstrumentProvider } from "../market-data/providers/angel-instrument.provider.js";
+import { angelInstrumentProvider } from "../market-data/providers/angel-instrument.provider.js";
 import { liveTickStore } from "../market-data/live/live-tick.store.js";
 import { strategyRegistry } from "../strategies/runner/strategy-registry.js";
 import { CreatePaperOrderInput, ExitPaperPositionInput } from "../paper-trading/types.js";
@@ -185,15 +185,20 @@ export class ReplayService {
     const fromDate = new Date(currentDate);
     fromDate.setDate(fromDate.getDate() - 10);
 
-    const formatDate = (d: Date) => {
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
-      return `${yyyy}-${mm}-${dd}`;
+    const getKolkataDateOnly = (date: Date) => {
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+      const parts = formatter.formatToParts(date);
+      const getVal = (type: string) => parts.find((p) => p.type === type)?.value || "";
+      return `${getVal("year")}-${getVal("month")}-${getVal("day")}`;
     };
 
-    const fromDateStr = `${formatDate(fromDate)} 09:15`;
-    const toDateStr = `${formatDate(toDate)} 15:30`;
+    const fromDateStr = `${getKolkataDateOnly(fromDate)} 09:15`;
+    const toDateStr = `${getKolkataDateOnly(toDate)} 15:30`;
 
     const provider = new AngelMarketDataProvider();
     const response = await provider.getCandles({
@@ -379,13 +384,8 @@ export class ReplayService {
       return;
     }
 
-    // Reset readiness state flags for replay session
-    if (strategy.state) {
-      const state = strategy.state as any;
-      state.isSubscribed = false;
-      state.isDataReady = false;
-      state.subscriptionStartTime = 0;
-    }
+    // Reset strategy state for a fresh replay session
+    strategy.state = {};
 
     const rules = strategy.rules as any;
     const trade = strategy.trade as any;
@@ -469,11 +469,15 @@ export class ReplayService {
         if (handler) {
           if (strategy.strategyType === "HIGH_LOW_BREAKOUT_REVERSAL") {
             if (handler.execute) {
-              await handler.execute({
-                app: this.app,
-                strategy,
-                isReplay: true,
-              });
+              try {
+                await handler.execute({
+                  app: this.app,
+                  strategy,
+                  isReplay: true,
+                });
+              } catch (error: any) {
+                this.app.log.error(error, `[Replay Loop] Error executing strategy ${strategy.id}: ${error.message}`);
+              }
             }
             const delayMs = 1000 / session.speed;
             await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -620,8 +624,7 @@ export class ReplayService {
       throw new AppError("Broker session expired", 401, "BROKER_SESSION_EXPIRED");
     }
 
-    const instrumentProvider = new AngelInstrumentProvider();
-    const indexInstrument = instrumentProvider.getIndexInstrument(input.symbol);
+    const indexInstrument = angelInstrumentProvider.getIndexInstrument(input.symbol);
 
     let exchange: string;
     let symboltoken: string;
@@ -630,7 +633,7 @@ export class ReplayService {
       exchange = indexInstrument.exchange;
       symboltoken = indexInstrument.symboltoken;
     } else {
-      const results = await instrumentProvider.search({ query: input.symbol });
+      const results = await angelInstrumentProvider.search({ query: input.symbol });
       const exactMatch = results.find(
         (inst) =>
           inst.symbol.toUpperCase() === input.symbol.toUpperCase() ||
@@ -700,7 +703,7 @@ export class ReplayService {
         low: Number(item[3]),
         close: Number(item[4]),
       };
-    });
+    }).sort((a: any, b: any) => a.time - b.time);
 
     session.candles = normalizedCandles;
 
@@ -773,7 +776,7 @@ export class ReplayService {
           low: Number(item[3]),
           close: Number(item[4]),
         };
-      });
+      }).sort((a: any, b: any) => a.time - b.time);
 
       if (!session.optionCandles) {
         session.optionCandles = new Map();

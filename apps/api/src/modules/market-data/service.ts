@@ -13,10 +13,9 @@ import type {
   OptionGreeksQuery,
   QuoteQuery,
 } from "./types.js";
-import { AngelInstrumentProvider } from "./providers/angel-instrument.provider.js";
+import { angelInstrumentProvider } from "./providers/angel-instrument.provider.js";
 import { candlesCache } from "./candles-cache.js";
 
-const angelInstrumentProvider = new AngelInstrumentProvider();
 
 export class MarketDataService {
   constructor(private readonly db: FastifyInstance["db"]) {}

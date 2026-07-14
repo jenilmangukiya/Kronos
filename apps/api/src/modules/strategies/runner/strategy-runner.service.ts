@@ -6,6 +6,7 @@ import type { StrategyTrade } from "./handlers/types.js";
 import { liveTickStore } from "../../market-data/live/live-tick.store.js";
 import { realtimeService } from "../../realtime/realtime.service.js";
 import { liveMarketDataService } from "../../market-data/live/live-market-data.service.js";
+import { replaySessions } from "../../market-replay/replay.session.js";
 
 export class StrategyRunnerService {
   private interval: NodeJS.Timeout | null = null;
@@ -78,6 +79,12 @@ export class StrategyRunnerService {
     risk: unknown;
     state?: unknown;
   }) {
+    const activeReplay = replaySessions.get(strategy.userId);
+    if (activeReplay && activeReplay.strategyId === strategy.id) {
+      // Skip live/paper evaluation while a replay session is active for this strategy
+      return;
+    }
+
     const handler = strategyRegistry.get(strategy.strategyType);
     if (!handler) {
       this.app.log.error(

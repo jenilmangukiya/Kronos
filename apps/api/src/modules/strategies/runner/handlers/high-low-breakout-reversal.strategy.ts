@@ -5,7 +5,7 @@ import type {
   StrategyDecision,
   StrategyHandler,
 } from "./types.js";
-import { AngelInstrumentProvider } from "../../../market-data/providers/angel-instrument.provider.js";
+import { angelInstrumentProvider } from "../../../market-data/providers/angel-instrument.provider.js";
 import { AngelMarketDataProvider } from "../../../market-data/providers/angel.provider.js";
 import { PaperTradingService } from "../../../paper-trading/service.js";
 import { candlesCache } from "../../../market-data/candles-cache.js";
@@ -803,8 +803,7 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
           if (underlyingLtp < state.putTrack.decisionCandle.low) {
             await addStrategyLog(context, `[CHECK B SUCCESS] LTP: ${underlyingLtp} < DecisionLow: ${state.putTrack.decisionCandle.low}`);
 
-            const provider = new AngelInstrumentProvider();
-            const contracts = await provider.getOptionContracts({
+            const contracts = await angelInstrumentProvider.getOptionContracts({
               symbol: (context.strategy as any).symbol,
               expiry: trade.expiry,
             });
@@ -1070,8 +1069,7 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
           if (underlyingLtp > state.callTrack.decisionCandle.high) {
             await addStrategyLog(context, `[CHECK B SUCCESS] LTP: ${underlyingLtp} > DecisionHigh: ${state.callTrack.decisionCandle.high}`);
 
-            const provider = new AngelInstrumentProvider();
-            const contracts = await provider.getOptionContracts({
+            const contracts = await angelInstrumentProvider.getOptionContracts({
               symbol: (context.strategy as any).symbol,
               expiry: trade.expiry,
             });

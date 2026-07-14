@@ -256,3 +256,6 @@ export class AngelInstrumentProvider {
     }
   }
 }
+
+export const angelInstrumentProvider = new AngelInstrumentProvider();
+

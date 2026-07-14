@@ -406,6 +406,79 @@ export class ReplayService {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
+    // Preload option candles
+    if (session.isRunning && session.candles.length > 0) {
+      try {
+        const firstCandle = session.candles[0];
+        if (firstCandle) {
+          const replayDate = new Date(Number(firstCandle.time) * 1000)
+            .toISOString().slice(0, 10);
+          this.app.log.info(
+            `[Replay Service] Preloading option contracts for symbol ${strategy.symbol}, expiry ${trade.expiry}, date ${replayDate}`
+          );
+
+          const contracts = await angelInstrumentProvider.getOptionContracts({
+            symbol: strategy.symbol,
+            expiry: trade.expiry,
+          });
+
+          const strikes = [...new Set(contracts.map((c: any) => c.strike))].sort((a, b) => a - b);
+          const strikesToLoad: number[] = [];
+          if (strikes.length > 0) {
+            // Find min/max price of the underlying for the full day
+            let minPrice = Infinity;
+            let maxPrice = -Infinity;
+            for (const c of session.candles) {
+              if (c.low < minPrice) minPrice = c.low;
+              if (c.high > maxPrice) maxPrice = c.high;
+            }
+
+            // Find strikes within the full day range [minPrice, maxPrice]
+            // and add a buffer of 5 strikes on either side
+            const firstStrike = strikes[0];
+            const minStrikeNear = strikes.reduce((nearest, strike) => {
+              return Math.abs(strike - minPrice) < Math.abs(nearest - minPrice) ? strike : nearest;
+            }, firstStrike);
+            const maxStrikeNear = strikes.reduce((nearest, strike) => {
+              return Math.abs(strike - maxPrice) < Math.abs(nearest - maxPrice) ? strike : nearest;
+            }, firstStrike);
+
+            const minIndex = strikes.indexOf(minStrikeNear);
+            const maxIndex = strikes.indexOf(maxStrikeNear);
+
+            const startIndex = Math.max(0, minIndex - 5);
+            const endIndex = Math.min(strikes.length - 1, maxIndex + 5);
+
+            for (let i = startIndex; i <= endIndex; i++) {
+              strikesToLoad.push(strikes[i]);
+            }
+          }
+
+          const relevantContracts = contracts.filter(
+            (c: any) => strikesToLoad.includes(c.strike)
+          );
+
+          this.app.log.info(
+            `[Replay Service] Preloading option candles for ${relevantContracts.length} contracts (Strikes to load: ${strikesToLoad.join(", ")})`
+          );
+
+          // Fetch in parallel
+          await Promise.all(
+            relevantContracts.map(async (c: any) => {
+              try {
+                await this.fetchOptionCandles(session, c.token, "NFO", replayDate);
+              } catch (err: any) {
+                this.app.log.warn(`[Replay Service] Failed to preload option candles for token ${c.token}: ${err.message}`);
+              }
+            })
+          );
+          this.app.log.info(`[Replay Service] Preloading option candles completed`);
+        }
+      } catch (err: any) {
+        this.app.log.error(err, `[Replay Service] Option preloading failed: ${err.message}`);
+      }
+    }
+
     while (session.isRunning && session.currentIndex < session.candles.length) {
       const candle = session.candles[session.currentIndex];
       if (!candle) {
@@ -431,7 +504,7 @@ export class ReplayService {
         liveTickStore.setTick(session.brokerAccountId, {
           token: underlyingToken,
           sequenceNumber: "",
-          exchangeTimestamp: Date.now(),
+          exchangeTimestamp: candle.time * 1000,
           ltp: price,
         });
 
@@ -797,7 +870,8 @@ export class ReplayService {
 
 /**
  * Look up the option price at a given timestamp from cached option candles.
- * Returns the close price of the candle whose time is closest (≤ timestamp).
+ * Returns the close price of the candle whose time is nearest to the timestamp
+ * and within 60 seconds (either lookback or lookforward).
  * Returns null if no data is available.
  */
 export function getOptionPriceAtTime(
@@ -808,13 +882,14 @@ export function getOptionPriceAtTime(
   const candles = session.optionCandles?.get(optionToken);
   if (!candles || candles.length === 0) return null;
 
-  // Find the last candle whose time <= timestampSec
   let best: ReplayCandle | null = null;
+  let minDiff = 61; // only match within 60 seconds
+
   for (const c of candles) {
-    if (c.time <= timestampSec) {
+    const diff = Math.abs(c.time - timestampSec);
+    if (diff < minDiff) {
+      minDiff = diff;
       best = c;
-    } else {
-      break; // candles are sorted by time ascending
     }
   }
 

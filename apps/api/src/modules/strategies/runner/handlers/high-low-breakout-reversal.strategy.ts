@@ -68,11 +68,10 @@ function isPastSquareOffTime(currentTime: Date, squareOffTimeStr?: string): bool
   return false;
 }
 
-// Helper: group 1-minute candles into 5-minute candles closed before nowSec
-function getFiveMinuteCandles(candles1m: any[], nowSec: number) {
+// Helper: group 1-minute candles into 5-minute candles closed (purely data-driven)
+function getFiveMinuteCandles(candles1m: any[]) {
   const buckets: Record<number, any[]> = {};
   for (const c of candles1m) {
-    if (c.time >= nowSec) continue; // Only process candles before current time
     const bucketStart = Math.floor(c.time / 300) * 300;
     if (!buckets[bucketStart]) {
       buckets[bucketStart] = [];
@@ -82,10 +81,11 @@ function getFiveMinuteCandles(candles1m: any[], nowSec: number) {
 
   const result: any[] = [];
   const sortedStarts = Object.keys(buckets).map(Number).sort((a, b) => a - b);
+  const maxTime = candles1m.length > 0 ? candles1m[candles1m.length - 1].time : 0;
 
   for (const start of sortedStarts) {
-    // Closed only if current time has reached the start of the next candle
-    if (nowSec < start + 300) {
+    // Closed only if the visible dataset has reached the start of the next candle
+    if (maxTime < start + 300) {
       continue;
     }
 
@@ -273,8 +273,8 @@ async function getYesterdayHighLow(
 
 // Helper: update strategy state in DB/session
 async function updateStrategyState(context: StrategyContext, state: any) {
-  await loadDeps();
   context.strategy.state = state;
+  await loadDeps();
   const isReplay = replaySessions.has(context.strategy.userId);
   if (!isReplay) {
     await context.app.db.strategy.update({
@@ -316,6 +316,63 @@ async function addStrategyLog(context: StrategyContext, message: string, meta: a
       },
     });
   }
+}
+
+async function getReplayOptionPriceWithFallback(
+  context: StrategyContext,
+  replaySession: any,
+  optionToken: string,
+  timestampSec: number,
+  fallbackOptionType: "CE" | "PE",
+  strike: number | undefined,
+  underlyingPrice: number,
+): Promise<number> {
+  let price = getOptionPriceAtTimeFn(replaySession, optionToken, timestampSec);
+  if (price !== null && price > 0) {
+    return price;
+  }
+
+  try {
+    const replayService = new ReplayServiceClass(context.app);
+    const sessionTime = new Date(Number(replaySession.currentTime) * 1000);
+    const date = getKolkataDateStr(sessionTime);
+    
+    await replayService.fetchOptionCandles(replaySession, optionToken, "NFO", date);
+    
+    price = getOptionPriceAtTimeFn(replaySession, optionToken, timestampSec);
+  } catch (err: any) {
+    await addStrategyLog(context, `[ERROR] Dynamic option candle fetch failed for token ${optionToken}: ${err.message}`);
+  }
+
+  if (price !== null && price > 0) {
+    return price;
+  }
+
+  const candles = replaySession.optionCandles?.get(optionToken) || [];
+  const count = candles.length;
+  const firstCandleTime = count > 0 ? new Date(candles[0].time * 1000).toISOString() : "N/A";
+  const lastCandleTime = count > 0 ? new Date(candles[count - 1].time * 1000).toISOString() : "N/A";
+  const requestedTimeStr = new Date(timestampSec * 1000).toISOString();
+
+  await addStrategyLog(
+    context,
+    `[OPTION DEBUG]\nToken: ${optionToken}\nRequested Time: ${requestedTimeStr}\nAvailable candles: ${count}\nFirst candle time: ${firstCandleTime}\nLast candle time: ${lastCandleTime}`
+  );
+
+  const appliedStrike = strike || underlyingPrice;
+  const intrinsic = fallbackOptionType === "CE"
+    ? Math.max(0, underlyingPrice - appliedStrike)
+    : Math.max(0, appliedStrike - underlyingPrice);
+
+  const timeValue = Math.max(50, Math.round(underlyingPrice * 0.01));
+  const simulatedPrice = Math.max(10, Math.round(intrinsic + timeValue));
+
+  await addStrategyLog(
+    context,
+    `[FALLBACK] Option price not available for token ${optionToken}. Using simulated fallback price: ${simulatedPrice} (Intrinsic: ${intrinsic}, TimeValue: ${timeValue})`
+  );
+
+  return simulatedPrice;
 }
 
 export class HighLowBreakoutReversalStrategy implements StrategyHandler {
@@ -421,40 +478,36 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
       await updateStrategyState(context, state);
     }
 
-    if (state.isSubscribed === undefined) {
-      state.isSubscribed = false;
-      state.isDataReady = false;
-      state.subscriptionStartTime = 0;
-      await updateStrategyState(context, state);
-    }
-
-    if (!state.isSubscribed) {
-      const subscriptions = this.getRequiredSubscriptions(context.strategy);
-      if (!isReplay) {
-        liveMarketDataService.subscribe(context.strategy.userId, brokerAccountId, subscriptions as any);
-      }
+    if (isReplay) {
       state.isSubscribed = true;
-      state.subscriptionStartTime = Date.now();
-      await updateStrategyState(context, state);
-      await addStrategyLog(context, "[SUBSCRIBE] Request sent");
-    }
-
-    if (!state.isDataReady) {
-      const tick = liveTickStore.getTick(brokerAccountId, underlyingToken);
-      if (tick && tick.ltp !== undefined && tick.ltp !== null) {
-        state.isDataReady = true;
+      state.isDataReady = true;
+    } else {
+      if (state.isSubscribed === undefined) {
+        state.isSubscribed = false;
+        state.isDataReady = false;
+        state.subscriptionStartTime = 0;
         await updateStrategyState(context, state);
-        await addStrategyLog(context, "[READY] Data received, strategy active");
-      } else {
-        const elapsed = Date.now() - state.subscriptionStartTime;
-        if (elapsed > 10000) {
-          await addStrategyLog(context, "[ERROR] Subscription failed");
-          if (isReplay) {
-            const session = replaySessions.get(context.strategy.userId);
-            if (session) {
-              session.isRunning = false;
-            }
-          } else {
+      }
+
+      if (!state.isSubscribed) {
+        const subscriptions = this.getRequiredSubscriptions(context.strategy);
+        liveMarketDataService.subscribe(context.strategy.userId, brokerAccountId, subscriptions as any);
+        state.isSubscribed = true;
+        state.subscriptionStartTime = Date.now();
+        await updateStrategyState(context, state);
+        await addStrategyLog(context, "[SUBSCRIBE] Request sent");
+      }
+
+      if (!state.isDataReady) {
+        const tick = liveTickStore.getTick(brokerAccountId, underlyingToken);
+        if (tick && tick.ltp !== undefined && tick.ltp !== null) {
+          state.isDataReady = true;
+          await updateStrategyState(context, state);
+          await addStrategyLog(context, "[READY] Data received, strategy active");
+        } else {
+          const elapsed = Date.now() - state.subscriptionStartTime;
+          if (elapsed > 10000) {
+            await addStrategyLog(context, "[ERROR] Subscription failed");
             await context.app.db.strategy.update({
               where: { id: context.strategy.id },
               data: { status: "STOPPED" },
@@ -470,8 +523,8 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
               "strategy",
               "runtime",
             ]);
+            return;
           }
-          return;
         }
       }
     }
@@ -504,12 +557,14 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
         }
       } catch (err: any) {
         context.app.log.warn(err, `Failed to fetch yesterday's High/Low. Will retry on next tick.`);
-        const now = Date.now();
-        const lastLogged = state.lastLoggedErrorTime || 0;
-        if (now - lastLogged > 60 * 1000) {
-          state.lastLoggedErrorTime = now;
-          await updateStrategyState(context, state);
-          await addStrategyLog(context, `[WARNING] Failed to fetch yesterday's High/Low: ${err.message}. Retrying...`);
+        if (!isReplay) {
+          const now = Date.now();
+          const lastLogged = state.lastLoggedErrorTime || 0;
+          if (now - lastLogged > 60 * 1000) {
+            state.lastLoggedErrorTime = now;
+            await updateStrategyState(context, state);
+            await addStrategyLog(context, `[WARNING] Failed to fetch yesterday's High/Low: ${err.message}. Retrying...`);
+          }
         }
         return;
       }
@@ -519,6 +574,7 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
         lastLoggedCandleTime: 0,
         yesterdayHigh,
         yesterdayLow,
+        lastProcessedCandleTime: 0,
         putTrack: {
           referenceHigh: yesterdayHigh,
           yesterdayHigh,
@@ -530,6 +586,9 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
           candleBStartLogged: false,
           hasLoggedWaiting: false,
           hasLoggedCandleBStart: false,
+          lastProcessedCandleTime: 0,
+          hasProcessedCandle: false,
+          hasEnteredTrade: false,
         },
         callTrack: {
           referenceLow: yesterdayLow,
@@ -542,6 +601,9 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
           candleBStartLogged: false,
           hasLoggedWaiting: false,
           hasLoggedCandleBStart: false,
+          lastProcessedCandleTime: 0,
+          hasProcessedCandle: false,
+          hasEnteredTrade: false,
         },
       };
       await updateStrategyState(context, state);
@@ -552,34 +614,89 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
       return;
     }
 
+    // Fetch underlying LTP and update/reset currentCandle state
+    const tick = liveTickStore.getTick(brokerAccountId, underlyingToken);
+    const underlyingLtp = tick?.ltp ?? 0;
+    if (underlyingLtp <= 0) {
+      return;
+    }
+
+    const nowSec = currentTime.getTime() / 1000;
+    const startTime = Math.floor(nowSec / 300) * 300;
+
+    if (!state.currentCandle || state.currentCandle.startTime !== startTime) {
+      if (state.currentCandle) {
+        state.closedCandle = { ...state.currentCandle };
+      }
+      state.currentCandle = {
+        startTime,
+        open: underlyingLtp,
+        high: underlyingLtp,
+        low: underlyingLtp,
+        close: underlyingLtp,
+      };
+    } else {
+      state.currentCandle.high = Math.max(state.currentCandle.high, underlyingLtp);
+      state.currentCandle.low = Math.min(state.currentCandle.low, underlyingLtp);
+      state.currentCandle.close = underlyingLtp;
+    }
+    context.strategy.state = state;
+    await updateStrategyState(context, state);
+
     // 1. EOD Square-off Check
     const squareOffTime = rules.squareOffTime || risk?.squareOffTime || "15:15";
     if (isPastSquareOffTime(currentTime, squareOffTime)) {
       let stateChanged = false;
       const eodNowSec = currentTime.getTime() / 1000;
-      const eodTick = liveTickStore.getTick(brokerAccountId, underlyingToken);
-      const eodUnderlyingLtp = eodTick?.ltp ?? 0;
+      const eodUnderlyingLtp = state.currentCandle.close;
 
       // Close PUT if open
       if (state.putTrack.isTradeOpen && state.putTrack.currentPositionId) {
-        let optionLtp = state.putTrack.optionEntryPrice;
+        let optionLtp = 0;
         if (isReplay && replaySession) {
-          const replayOptPrice = getOptionPriceAtTimeFn(replaySession, state.putTrack.optionToken, eodNowSec);
-          if (replayOptPrice !== null) {
-            optionLtp = replayOptPrice;
-          } else {
-            optionLtp = state.putTrack.optionEntryPrice - (eodUnderlyingLtp - state.putTrack.underlyingEntryPrice) * 0.5;
-          }
+          optionLtp = await getReplayOptionPriceWithFallback(
+            context,
+            replaySession,
+            state.putTrack.optionToken,
+            eodNowSec,
+            "PE",
+            state.putTrack.strike,
+            eodUnderlyingLtp
+          );
         } else {
           const optTick = liveTickStore.getTick(brokerAccountId, state.putTrack.optionToken);
-          if (optTick) {
+          if (optTick && optTick.ltp > 0) {
             optionLtp = optTick.ltp;
           } else {
-            const tick = liveTickStore.getTick(brokerAccountId, underlyingToken);
-            if (tick) {
-              optionLtp = state.putTrack.optionEntryPrice - (tick.ltp - state.putTrack.underlyingEntryPrice) * 0.5;
+            try {
+              const brokerAccount = await context.app.db.brokerAccount.findUnique({
+                where: { id: brokerAccountId },
+              });
+              if (brokerAccount && brokerAccount.apiKey && brokerAccount.accessToken) {
+                const provider = new AngelMarketDataProvider();
+                const ltpRes = await provider.getLtp({
+                  apiKey: brokerAccount.apiKey,
+                  accessToken: brokerAccount.accessToken,
+                  query: {
+                    brokerAccountId,
+                    exchange: "NFO",
+                    tradingsymbol: state.putTrack.optionSymbol,
+                    symboltoken: state.putTrack.optionToken,
+                  },
+                });
+                if (ltpRes && ltpRes.status && ltpRes.data && ltpRes.data.ltp) {
+                  optionLtp = Number(ltpRes.data.ltp);
+                }
+              }
+            } catch (err) {
+              context.app.log.error(err, `Failed to fetch live LTP for PE contract during EOD`);
             }
           }
+        }
+
+        if (optionLtp <= 0) {
+          await addStrategyLog(context, `[ERROR] Live option price not available for EOD exit of PUT`);
+          return;
         }
 
         if (isReplay) {
@@ -602,24 +719,51 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
 
       // Close CALL if open
       if (state.callTrack.isTradeOpen && state.callTrack.currentPositionId) {
-        let optionLtp = state.callTrack.optionEntryPrice;
+        let optionLtp = 0;
         if (isReplay && replaySession) {
-          const replayOptPrice = getOptionPriceAtTimeFn(replaySession, state.callTrack.optionToken, eodNowSec);
-          if (replayOptPrice !== null) {
-            optionLtp = replayOptPrice;
-          } else {
-            optionLtp = state.callTrack.optionEntryPrice + (eodUnderlyingLtp - state.callTrack.underlyingEntryPrice) * 0.5;
-          }
+          optionLtp = await getReplayOptionPriceWithFallback(
+            context,
+            replaySession,
+            state.callTrack.optionToken,
+            eodNowSec,
+            "CE",
+            state.callTrack.strike,
+            eodUnderlyingLtp
+          );
         } else {
           const optTick = liveTickStore.getTick(brokerAccountId, state.callTrack.optionToken);
-          if (optTick) {
+          if (optTick && optTick.ltp > 0) {
             optionLtp = optTick.ltp;
           } else {
-            const tick = liveTickStore.getTick(brokerAccountId, underlyingToken);
-            if (tick) {
-              optionLtp = state.callTrack.optionEntryPrice + (tick.ltp - state.callTrack.underlyingEntryPrice) * 0.5;
+            try {
+              const brokerAccount = await context.app.db.brokerAccount.findUnique({
+                where: { id: brokerAccountId },
+              });
+              if (brokerAccount && brokerAccount.apiKey && brokerAccount.accessToken) {
+                const provider = new AngelMarketDataProvider();
+                const ltpRes = await provider.getLtp({
+                  apiKey: brokerAccount.apiKey,
+                  accessToken: brokerAccount.accessToken,
+                  query: {
+                    brokerAccountId,
+                    exchange: "NFO",
+                    tradingsymbol: state.callTrack.optionSymbol,
+                    symboltoken: state.callTrack.optionToken,
+                  },
+                });
+                if (ltpRes && ltpRes.status && ltpRes.data && ltpRes.data.ltp) {
+                  optionLtp = Number(ltpRes.data.ltp);
+                }
+              }
+            } catch (err) {
+              context.app.log.error(err, `Failed to fetch live LTP for CE contract during EOD`);
             }
           }
+        }
+
+        if (optionLtp <= 0) {
+          await addStrategyLog(context, `[ERROR] Live option price not available for EOD exit of CALL`);
+          return;
         }
 
         if (isReplay) {
@@ -641,20 +785,179 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
       }
 
       if (stateChanged) {
+        context.strategy.state = state;
         await updateStrategyState(context, state);
       }
       return;
     }
 
+    // 2. Process PUT Track Exits (Real-time SL/Target checks)
+    if (state.putTrack.isTradeOpen && state.putTrack.currentPositionId) {
+      let isOpen = false;
+      if (isReplay) {
+        const pos = replaySession!.positions.find((p: any) => p.id === state.putTrack.currentPositionId && p.status === "OPEN");
+        isOpen = !!pos;
+      } else {
+        const pos = await context.app.db.paperPosition.findFirst({
+          where: { id: state.putTrack.currentPositionId, status: "OPEN" }
+        });
+        isOpen = !!pos;
+      }
+
+      if (!isOpen) {
+        state.putTrack.isTradeOpen = false;
+        state.putTrack.currentPositionId = undefined;
+        context.strategy.state = state;
+        await updateStrategyState(context, state);
+      } else {
+        let optionLtp = 0;
+        if (isReplay && replaySession) {
+          optionLtp = await getReplayOptionPriceWithFallback(
+            context,
+            replaySession,
+            state.putTrack.optionToken,
+            nowSec,
+            "PE",
+            state.putTrack.strike,
+            underlyingLtp
+          );
+        } else {
+          const optTick = liveTickStore.getTick(brokerAccountId, state.putTrack.optionToken);
+          if (optTick && optTick.ltp > 0) {
+            optionLtp = optTick.ltp;
+          }
+        }
+
+        if (optionLtp <= 0) {
+          await addStrategyLog(context, `[WARNING] Option price not available for PUT trade tracking, skipping exit check for this tick`);
+        } else {
+          let triggerExit = false;
+          let exitReason = "";
+          if (state.currentCandle.high >= state.putTrack.stopLoss) {
+            triggerExit = true;
+            exitReason = `PUT Stop Loss hit at underlying ₹${state.currentCandle.high} (SL: ₹${state.putTrack.stopLoss})`;
+          } else if (state.currentCandle.low <= (state.putTrack.underlyingTarget ?? 0)) {
+            triggerExit = true;
+            exitReason = `PUT Target hit at underlying ₹${state.currentCandle.low} (Target: ₹${state.putTrack.underlyingTarget})`;
+          }
+
+          if (triggerExit) {
+            if (isReplay) {
+              const paperService = new ReplayPaperService(replaySession!);
+              await paperService.exitPosition(context.strategy.userId, state.putTrack.currentPositionId, { price: optionLtp });
+            } else {
+              const paperService = new PaperTradingService(context.app.db);
+              await paperService.exitPosition(context.strategy.userId, state.putTrack.currentPositionId, { price: optionLtp });
+              try {
+                liveMarketDataService.unsubscribe(context.strategy.userId, brokerAccountId, [
+                  { exchangeType: 2, tokens: [state.putTrack.optionToken] }
+                ]);
+              } catch {}
+            }
+            await addStrategyLog(context, `[EXIT] ${exitReason}`, { underlyingLtp: state.currentCandle.close, optionLtp });
+            const refHigh = state.putTrack.decisionCandle ? state.putTrack.decisionCandle.high : state.putTrack.decisionCandleHigh;
+            state.putTrack.referenceHigh = refHigh;
+            state.putTrack.isTradeOpen = false;
+            state.putTrack.currentPositionId = undefined;
+            state.putTrack.decisionCandle = null;
+            state.putTrack.waitingForConfirmation = false;
+            state.putTrack.hasLoggedWaiting = false;
+            state.putTrack.hasLoggedCandleBStart = false;
+            context.strategy.state = state;
+            await updateStrategyState(context, state);
+          }
+        }
+      }
+    }
+
+    // 3. Process CALL Track Exits (Real-time SL/Target checks)
+    if (state.callTrack.isTradeOpen && state.callTrack.currentPositionId) {
+      let isOpen = false;
+      if (isReplay) {
+        const pos = replaySession!.positions.find((p: any) => p.id === state.callTrack.currentPositionId && p.status === "OPEN");
+        isOpen = !!pos;
+      } else {
+        const pos = await context.app.db.paperPosition.findFirst({
+          where: { id: state.callTrack.currentPositionId, status: "OPEN" }
+        });
+        isOpen = !!pos;
+      }
+
+      if (!isOpen) {
+        state.callTrack.isTradeOpen = false;
+        state.callTrack.currentPositionId = undefined;
+        context.strategy.state = state;
+        await updateStrategyState(context, state);
+      } else {
+        let optionLtp = 0;
+        if (isReplay && replaySession) {
+          optionLtp = await getReplayOptionPriceWithFallback(
+            context,
+            replaySession,
+            state.callTrack.optionToken,
+            nowSec,
+            "CE",
+            state.callTrack.strike,
+            underlyingLtp
+          );
+        } else {
+          const optTick = liveTickStore.getTick(brokerAccountId, state.callTrack.optionToken);
+          if (optTick && optTick.ltp > 0) {
+            optionLtp = optTick.ltp;
+          }
+        }
+
+        if (optionLtp <= 0) {
+          await addStrategyLog(context, `[WARNING] Option price not available for CALL trade tracking, skipping exit check for this tick`);
+        } else {
+          let triggerExit = false;
+          let exitReason = "";
+          if (state.currentCandle.low <= state.callTrack.stopLoss) {
+            triggerExit = true;
+            exitReason = `CALL Stop Loss hit at underlying ₹${state.currentCandle.low} (SL: ₹${state.callTrack.stopLoss})`;
+          } else if (state.currentCandle.high >= (state.callTrack.underlyingTarget ?? 999999)) {
+            triggerExit = true;
+            exitReason = `CALL Target hit at underlying ₹${state.currentCandle.high} (Target: ₹${state.callTrack.underlyingTarget})`;
+          }
+
+          if (triggerExit) {
+            if (isReplay) {
+              const paperService = new ReplayPaperService(replaySession!);
+              await paperService.exitPosition(context.strategy.userId, state.callTrack.currentPositionId, { price: optionLtp });
+            } else {
+              const paperService = new PaperTradingService(context.app.db);
+              await paperService.exitPosition(context.strategy.userId, state.callTrack.currentPositionId, { price: optionLtp });
+              try {
+                liveMarketDataService.unsubscribe(context.strategy.userId, brokerAccountId, [
+                  { exchangeType: 2, tokens: [state.callTrack.optionToken] }
+                ]);
+              } catch {}
+            }
+            await addStrategyLog(context, `[EXIT] ${exitReason}`, { underlyingLtp: state.currentCandle.close, optionLtp });
+            const refLow = state.callTrack.decisionCandle ? state.callTrack.decisionCandle.low : state.callTrack.decisionCandleLow;
+            state.callTrack.referenceLow = refLow;
+            state.callTrack.isTradeOpen = false;
+            state.callTrack.currentPositionId = undefined;
+            state.callTrack.decisionCandle = null;
+            state.callTrack.waitingForConfirmation = false;
+            state.callTrack.hasLoggedWaiting = false;
+            state.callTrack.hasLoggedCandleBStart = false;
+            context.strategy.state = state;
+            await updateStrategyState(context, state);
+          }
+        }
+      }
+    }
+
     // 2. Fetch candles and group
     let candles1m: any[] = [];
     if (isReplay) {
-      candles1m = replaySession!.candles;
+      // Slice visible candles up to the current session index
+      candles1m = replaySession!.candles.slice(0, replaySession!.currentIndex + 1);
     } else {
       try {
         candles1m = await get1MinuteCandles(context.app, brokerAccountId, exchange, underlyingToken, currentTime);
       } catch (err: any) {
-        // Check if this is an auth/session error
         const isAuthError = (e: any): boolean => {
           if (!e) return false;
           const msg = String(e.message || "").toLowerCase();
@@ -673,577 +976,536 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
         };
 
         if (isAuthError(err)) {
-          context.app.log.error(err, `[Strategy Runner] Expired/Invalid broker session for strategy ${context.strategy.id}. Waiting for session recovery...`);
-          
-          // Throttled warning log to prevent spamming DB logs
           const now = Date.now();
           const lastLogged = state.lastLoggedErrorTime || 0;
           if (now - lastLogged > 5 * 60 * 1000) {
             state.lastLoggedErrorTime = now;
+            context.strategy.state = state;
             await updateStrategyState(context, state);
             await addStrategyLog(context, "[WARNING] Broker session expired/invalid. Strategy remains running; it will resume automatically once you log back in.");
           }
-        } else {
-          // Log transient errors as warnings to avoid crashing the runner loop
-          context.app.log.warn(`[Strategy Runner] Strategy ${context.strategy.id} candle fetch failed with transient error: ${err.message}`);
         }
-        return; // Exit early since candles failed
+        return;
       }
     }
 
-    const closedCandles = getFiveMinuteCandles(candles1m, currentTime.getTime() / 1000);
+    const closedCandles = getFiveMinuteCandles(candles1m);
     if (closedCandles.length === 0) return;
-
     const lastCandle = closedCandles[closedCandles.length - 1];
-    const tick = liveTickStore.getTick(brokerAccountId, underlyingToken);
-    const underlyingLtp = tick?.ltp ?? lastCandle.close;
 
-    // Ensure data readiness
-    if (!underlyingLtp || !lastCandle) {
+    // 3. CLOSED CANDLE GUARD (Make Replay Deterministic)
+    if (state.lastProcessedCandleTime === lastCandle.time) {
       return;
     }
+    state.lastProcessedCandleTime = lastCandle.time;
+    context.strategy.state = state;
+    await updateStrategyState(context, state);
 
-    const nowSec = currentTime.getTime() / 1000;
-    const currentCandleTime = Math.floor(nowSec / 300) * 300;
-
-    let candleLogged = false;
-    for (const c of closedCandles) {
-      if (c.time > (state.lastLoggedCandleTime || 0)) {
-        state.lastLoggedCandleTime = c.time;
-        candleLogged = true;
-      }
-    }
-    if (candleLogged) {
-      await updateStrategyState(context, state);
-    }
-
-    // 3. Process PUT Track
-    if (state.putTrack.isTradeOpen) {
-      let isOpen = false;
-      if (isReplay) {
-        const pos = replaySession!.positions.find((p: any) => p.id === state.putTrack.currentPositionId && p.status === "OPEN");
-        isOpen = !!pos;
-      } else {
-        const pos = await context.app.db.paperPosition.findFirst({
-          where: { id: state.putTrack.currentPositionId, status: "OPEN" }
-        });
-        isOpen = !!pos;
-      }
-
-      if (!isOpen) {
-        state.putTrack.isTradeOpen = false;
-        state.putTrack.currentPositionId = undefined;
+    // 4. Process PUT Track Entry
+    if (!state.putTrack.isTradeOpen) {
+      const candleIndex = closedCandles.length - 1;
+      const isNewClosedCandle = lastCandle.time !== (state.putTrack.lastProcessedCandleTime || 0);
+      if (isNewClosedCandle) {
+        state.putTrack.lastProcessedCandleTime = lastCandle.time;
+        state.putTrack.hasProcessedCandle = false;
+        state.putTrack.hasEnteredTrade = false;
+        context.strategy.state = state;
         await updateStrategyState(context, state);
-      } else {
-        const simulatedOptionPrice = state.putTrack.optionEntryPrice - (underlyingLtp - state.putTrack.underlyingEntryPrice) * 0.5;
-        let optionLtp: number;
-        if (isReplay && replaySession) {
-          const replayOptPrice = getOptionPriceAtTimeFn(replaySession, state.putTrack.optionToken, nowSec);
-          optionLtp = replayOptPrice !== null ? replayOptPrice : simulatedOptionPrice;
-        } else {
-          const optTick = liveTickStore.getTick(brokerAccountId, state.putTrack.optionToken);
-          optionLtp = optTick?.ltp ?? simulatedOptionPrice;
-        }
 
-        let triggerExit = false;
-        let exitReason = "";
-
-        if (underlyingLtp >= state.putTrack.stopLoss) {
-          triggerExit = true;
-          exitReason = `PUT Stop Loss hit at underlying ₹${underlyingLtp} (SL: ₹${state.putTrack.stopLoss})`;
-        } else if (optionLtp >= state.putTrack.optionTarget) {
-          triggerExit = true;
-          exitReason = `PUT Target hit at option ₹${optionLtp} (Target: ₹${state.putTrack.optionTarget})`;
-        }
-
-        if (triggerExit) {
-          if (isReplay) {
-            const paperService = new ReplayPaperService(replaySession!);
-            await paperService.exitPosition(context.strategy.userId, state.putTrack.currentPositionId, { price: optionLtp });
-          } else {
-            const paperService = new PaperTradingService(context.app.db);
-            await paperService.exitPosition(context.strategy.userId, state.putTrack.currentPositionId, { price: optionLtp });
-            try {
-              liveMarketDataService.unsubscribe(context.strategy.userId, brokerAccountId, [
-                { exchangeType: 2, tokens: [state.putTrack.optionToken] }
-              ]);
-            } catch {}
-          }
-          await addStrategyLog(context, `[EXIT] ${exitReason}`, { underlyingLtp, optionLtp });
-
-          const refHigh = state.putTrack.decisionCandle ? state.putTrack.decisionCandle.high : state.putTrack.decisionCandleHigh;
-          state.putTrack.referenceHigh = refHigh;
-          state.putTrack.isTradeOpen = false;
-          state.putTrack.currentPositionId = undefined;
-          state.putTrack.decisionCandle = null;
-          state.putTrack.hasLoggedWaiting = false;
-          state.putTrack.hasLoggedCandleBStart = false;
-          await updateStrategyState(context, state);
-        }
-      }
-    } else {
-      // Step 2 — Confirmation Candle B
-      if (state.putTrack.waitingForConfirmation) {
-        if (currentCandleTime > state.putTrack.decisionCandle.time + 300) {
-          await addStrategyLog(context, "[FAILED] No confirmation in candle B");
-          state.putTrack.waitingForConfirmation = false;
-          state.putTrack.decisionCandle = null;
-          state.putTrack.candleBStartLogged = false;
-          state.putTrack.hasLoggedWaiting = false;
-          state.putTrack.hasLoggedCandleBStart = false;
-          await updateStrategyState(context, state);
-        } else if (currentCandleTime === state.putTrack.decisionCandle.time + 300) {
-          if (!state.putTrack.hasLoggedCandleBStart) {
-            await addStrategyLog(context, `[CANDLE B START] Time: ${new Date(currentCandleTime * 1000).toISOString()}`);
-            state.putTrack.candleBStartLogged = true;
-            state.putTrack.hasLoggedCandleBStart = true;
-            await updateStrategyState(context, state);
-          }
-
-          if (underlyingLtp < state.putTrack.decisionCandle.low) {
-            await addStrategyLog(context, `[CHECK B SUCCESS] LTP: ${underlyingLtp} < DecisionLow: ${state.putTrack.decisionCandle.low}`);
-
-            const contracts = await angelInstrumentProvider.getOptionContracts({
-              symbol: (context.strategy as any).symbol,
-              expiry: trade.expiry,
-            });
-
-            if (contracts.length > 0) {
-              const strikes = [...new Set(contracts.map(c => c.strike))].sort((a, b) => a - b);
-              const firstStrike = strikes[0] || 0;
-              const atmStrike = strikes.reduce((nearest, strike) => {
-                if (nearest === undefined) return strike;
-                return Math.abs(strike - underlyingLtp) < Math.abs(nearest - underlyingLtp) ? strike : nearest;
-              }, firstStrike);
-
-              const peContract = contracts.find(c => c.strike === atmStrike && c.optionType === "PE");
-              if (peContract) {
-                let optionEntryPrice = underlyingLtp * 0.01;
-                let positionId = "";
-
-                if (isReplay) {
-                  // Fetch real historical option candles for this PE contract
-                  const replayService = new ReplayServiceClass(context.app);
-                  const replayDate = new Date(Number(replaySession!.currentTime) * 1000)
-                    .toISOString().slice(0, 10);
-                  await replayService.fetchOptionCandles(replaySession!, peContract.token, "NFO", replayDate);
-                  const realPrice = getOptionPriceAtTimeFn(replaySession!, peContract.token, nowSec);
-                  if (realPrice !== null && realPrice > 0) {
-                    optionEntryPrice = realPrice;
-                  }
-
-                  await addStrategyLog(context,
-                    `[OPTION MAP] Underlying: ${underlyingLtp}, Strike: ${atmStrike}, Expiry: ${trade.expiry}, Symbol: ${peContract.symbol}, Token: ${peContract.token}, Price: ${optionEntryPrice}`);
-
-                  const paperService = new ReplayPaperService(replaySession!);
-                  const orderResult = await paperService.createOrder(context.strategy.userId, {
-                    strategyId: context.strategy.id,
-                    brokerAccountId: replaySession!.brokerAccountId,
-                    instrumentType: "OPTION",
-                    token: peContract.token,
-                    symbol: peContract.symbol,
-                    exchangeType: 2,
-                    exchange: "NFO",
-                    side: "BUY",
-                    quantity: trade.quantity,
-                    price: optionEntryPrice,
-                  });
-                  positionId = orderResult.id;
-                } else {
-                  const brokerAccount = await context.app.db.brokerAccount.findUnique({
-                    where: { id: brokerAccountId },
-                  });
-                  if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
-                    throw new AppError("Broker account session is missing", 400, "BROKER_SESSION_ERROR");
-                  }
-
-                  let livePrice = underlyingLtp * 0.01;
-                  try {
-                    const provider = new AngelMarketDataProvider();
-                    const ltpRes = await provider.getLtp({
-                      apiKey: brokerAccount.apiKey,
-                      accessToken: brokerAccount.accessToken,
-                      query: {
-                        brokerAccountId,
-                        exchange: "NFO",
-                        tradingsymbol: peContract.symbol,
-                        symboltoken: peContract.token,
-                      },
-                    });
-                    if (ltpRes && ltpRes.status && ltpRes.data && ltpRes.data.ltp) {
-                      livePrice = Number(ltpRes.data.ltp);
-                    }
-                  } catch (err) {
-                    context.app.log.error(err, `Failed to fetch live LTP for PE contract ${peContract.symbol}`);
-                  }
-
-                  const paperService = new PaperTradingService(context.app.db);
-                  const orderResult = await paperService.createOrder(context.strategy.userId, {
-                    strategyId: context.strategy.id,
-                    brokerAccountId,
-                    instrumentType: "OPTION",
-                    token: peContract.token,
-                    symbol: peContract.symbol,
-                    exchangeType: 2,
-                    exchange: "NFO",
-                    side: "BUY",
-                    quantity: trade.quantity,
-                    price: livePrice,
-                  });
-                  optionEntryPrice = orderResult.position.avgPrice;
-                  positionId = orderResult.position.id;
-
-                  liveMarketDataService.subscribe(context.strategy.userId, brokerAccountId, [
-                    { exchangeType: 2, tokens: [peContract.token] }
-                  ]);
-                }
-
-                const candleRange = state.putTrack.decisionCandle.high - underlyingLtp;
-                let stopLoss: number;
-                let mode: string;
-                if (candleRange < 10) {
-                  stopLoss = underlyingLtp + 10;
-                  mode = "FIXED_10";
-                } else {
-                  stopLoss = state.putTrack.decisionCandle.high;
-                  mode = "CANDLE_BASED";
-                }
-
-                await addStrategyLog(
-                  context,
-                  `[SL LOGIC]\nCandle Range: ${candleRange}\nApplied SL: ${stopLoss}\nMode: ${mode}`
-                );
-
-                const actualRisk = Math.abs(stopLoss - underlyingLtp);
-                const riskValue = actualRisk * 0.5;
-                const rewardRatio = risk?.rewardRatio || 3;
-                const underlyingSL = stopLoss;
-                const underlyingTarget = underlyingLtp - (rewardRatio * actualRisk);
-                const optionTarget = optionEntryPrice + rewardRatio * riskValue;
-                const optionSL = optionEntryPrice - riskValue;
-
-                state.putTrack = {
-                  ...state.putTrack,
-                  isTradeOpen: true,
-                  waitingForConfirmation: false,
-                  candleBStartLogged: false,
-                  currentPositionId: positionId,
-                  underlyingEntryPrice: underlyingLtp,
-                  optionToken: peContract.token,
-                  optionSymbol: peContract.symbol,
-                  optionEntryPrice,
-                  optionTarget,
-                  stopLoss: underlyingSL,
-                  decisionCandleHigh: state.putTrack.decisionCandle.high,
-                  lastCandleTime: currentCandleTime,
-                  hasLoggedWaiting: false,
-                  hasLoggedCandleBStart: false,
-                };
-                await updateStrategyState(context, state);
-                await addStrategyLog(context, `[ENTRY]\nUnderlying: ${underlyingLtp}\nOption Entry: ₹${optionEntryPrice.toFixed(2)}`);
-                await addStrategyLog(context, `[PLAN]\n\nUnderlying:\nEntry: ${underlyingLtp}\nStop Loss: ${underlyingSL}\nTarget: ${underlyingTarget.toFixed(2)}\n\nOption:\nEntry: ₹${optionEntryPrice.toFixed(2)}\nStop Loss: ₹${optionSL.toFixed(2)}\nTarget: ₹${optionTarget.toFixed(2)}\n\nRisk: ₹${riskValue.toFixed(2)}\nReward: ₹${(rewardRatio * riskValue).toFixed(2)}\nRR: 1:${rewardRatio}`);
-              }
-            }
-          }
-        }
-      }
-
-      // Step 1 — Detect Candle A (only check on closed candle when no trade is open and not waiting for confirmation)
-      if (!state.putTrack.isTradeOpen && !state.putTrack.waitingForConfirmation) {
-        const isNewClosedCandle = lastCandle.time !== state.putTrack.lastEvaluatedCandleTime;
-        if (isNewClosedCandle) {
+        if (candleIndex < 2) {
           const hasCrossed = lastCandle.high > state.putTrack.referenceHigh;
           const isBearish = lastCandle.close < lastCandle.open;
-
           if (hasCrossed && isBearish) {
-            await addStrategyLog(
-              context,
-              `[CANDLE A DETECTED] Time: ${new Date(lastCandle.time * 1000).toISOString()}, High: ${lastCandle.high}, Low: ${lastCandle.low}`
-            );
-            if (!state.putTrack.hasLoggedWaiting) {
-              await addStrategyLog(context, "[WAITING] Waiting for confirmation");
-              state.putTrack.hasLoggedWaiting = true;
-            }
-            state.putTrack.decisionCandle = {
-              time: lastCandle.time,
-              open: lastCandle.open,
-              high: lastCandle.high,
-              low: lastCandle.low,
-              close: lastCandle.close,
-            };
-            state.putTrack.decisionCandleHigh = lastCandle.high;
-            state.putTrack.waitingForConfirmation = true;
-            state.putTrack.lastEvaluatedCandleTime = lastCandle.time;
-            await updateStrategyState(context, state);
-          } else {
-            state.putTrack.lastEvaluatedCandleTime = lastCandle.time;
-            await updateStrategyState(context, state);
+            await addStrategyLog(context, `[SKIPPED]\nReason: Breakout detected on early candle (candleIndex: ${candleIndex}) before 09:25`);
           }
-        }
-      }
-    }
-
-    // 4. Process CALL Track
-    if (state.callTrack.isTradeOpen) {
-      let isOpen = false;
-      if (isReplay) {
-        const pos = replaySession!.positions.find((p: any) => p.id === state.callTrack.currentPositionId && p.status === "OPEN");
-        isOpen = !!pos;
-      } else {
-        const pos = await context.app.db.paperPosition.findFirst({
-          where: { id: state.callTrack.currentPositionId, status: "OPEN" }
-        });
-        isOpen = !!pos;
-      }
-
-      if (!isOpen) {
-        state.callTrack.isTradeOpen = false;
-        state.callTrack.currentPositionId = undefined;
-        await updateStrategyState(context, state);
-      } else {
-        const simulatedOptionPrice = state.callTrack.optionEntryPrice + (underlyingLtp - state.callTrack.underlyingEntryPrice) * 0.5;
-        let optionLtp: number;
-        if (isReplay && replaySession) {
-          const replayOptPrice = getOptionPriceAtTimeFn(replaySession, state.callTrack.optionToken, nowSec);
-          optionLtp = replayOptPrice !== null ? replayOptPrice : simulatedOptionPrice;
         } else {
-          const optTick = liveTickStore.getTick(brokerAccountId, state.callTrack.optionToken);
-          optionLtp = optTick?.ltp ?? simulatedOptionPrice;
-        }
+          if (state.putTrack.hasProcessedCandle) return;
+          state.putTrack.hasProcessedCandle = true;
+          context.strategy.state = state;
 
-        let triggerExit = false;
-        let exitReason = "";
+          if (state.putTrack.waitingForConfirmation) {
+            const decisionCandle = state.putTrack.decisionCandle;
+            if (lastCandle.time > decisionCandle.time + 300) {
+              await addStrategyLog(context, `[SKIPPED]\nReason: Missed Candle B window. Resetting state.`);
+              state.putTrack.waitingForConfirmation = false;
+              state.putTrack.decisionCandle = null;
+              context.strategy.state = state;
+              await updateStrategyState(context, state);
+            } else if (lastCandle.time === decisionCandle.time + 300) {
+              await addStrategyLog(
+                context,
+                `[CANDLE B CHECK]\nTime: ${new Date(lastCandle.time * 1000).toISOString()}\nDecisionLow: ${decisionCandle.low}\nCurrentLow: ${lastCandle.low}`
+              );
 
-        if (underlyingLtp <= state.callTrack.stopLoss) {
-          triggerExit = true;
-          exitReason = `CALL Stop Loss hit at underlying ₹${underlyingLtp} (SL: ₹${state.callTrack.stopLoss})`;
-        } else if (optionLtp >= state.callTrack.optionTarget) {
-          triggerExit = true;
-          exitReason = `CALL Target hit at option ₹${optionLtp} (Target: ₹${state.callTrack.optionTarget})`;
-        }
+              if (lastCandle.low < decisionCandle.low) {
+                const contracts = await angelInstrumentProvider.getOptionContracts({
+                  symbol: (context.strategy as any).symbol,
+                  expiry: trade.expiry,
+                });
 
-        if (triggerExit) {
-          if (isReplay) {
-            const paperService = new ReplayPaperService(replaySession!);
-            await paperService.exitPosition(context.strategy.userId, state.callTrack.currentPositionId, { price: optionLtp });
-          } else {
-            const paperService = new PaperTradingService(context.app.db);
-            await paperService.exitPosition(context.strategy.userId, state.callTrack.currentPositionId, { price: optionLtp });
-            try {
-              liveMarketDataService.unsubscribe(context.strategy.userId, brokerAccountId, [
-                { exchangeType: 2, tokens: [state.callTrack.optionToken] }
-              ]);
-            } catch {}
-          }
-          await addStrategyLog(context, `[EXIT] ${exitReason}`, { underlyingLtp, optionLtp });
+                if (contracts.length > 0) {
+                  const strikes = [...new Set(contracts.map(c => c.strike))].sort((a, b) => a - b);
+                  const firstStrike = strikes[0] || 0;
+                  const atmStrike = strikes.reduce((nearest, strike) => {
+                    if (nearest === undefined) return strike;
+                    return Math.abs(strike - lastCandle.close) < Math.abs(nearest - lastCandle.close) ? strike : nearest;
+                  }, firstStrike);
 
-          const refLow = state.callTrack.decisionCandle ? state.callTrack.decisionCandle.low : state.callTrack.decisionCandleLow;
-          state.callTrack.referenceLow = refLow;
-          state.callTrack.isTradeOpen = false;
-          state.callTrack.currentPositionId = undefined;
-          state.callTrack.decisionCandle = null;
-          state.callTrack.hasLoggedWaiting = false;
-          state.callTrack.hasLoggedCandleBStart = false;
-          await updateStrategyState(context, state);
-        }
-      }
-    } else {
-      // Step 2 — Confirmation Candle B
-      if (state.callTrack.waitingForConfirmation) {
-        if (currentCandleTime > state.callTrack.decisionCandle.time + 300) {
-          await addStrategyLog(context, "[FAILED] No confirmation in candle B");
-          state.callTrack.waitingForConfirmation = false;
-          state.callTrack.decisionCandle = null;
-          state.callTrack.candleBStartLogged = false;
-          state.callTrack.hasLoggedWaiting = false;
-          state.callTrack.hasLoggedCandleBStart = false;
-          await updateStrategyState(context, state);
-        } else if (currentCandleTime === state.callTrack.decisionCandle.time + 300) {
-          if (!state.callTrack.hasLoggedCandleBStart) {
-            await addStrategyLog(context, `[CANDLE B START] Time: ${new Date(currentCandleTime * 1000).toISOString()}`);
-            state.callTrack.candleBStartLogged = true;
-            state.callTrack.hasLoggedCandleBStart = true;
-            await updateStrategyState(context, state);
-          }
+                  const peContract = contracts.find(c => c.strike === atmStrike && c.optionType === "PE");
+                  if (peContract) {
+                    let optionEntryPrice = 0;
+                    let positionId = "";
 
-          if (underlyingLtp > state.callTrack.decisionCandle.high) {
-            await addStrategyLog(context, `[CHECK B SUCCESS] LTP: ${underlyingLtp} > DecisionHigh: ${state.callTrack.decisionCandle.high}`);
+                    if (isReplay) {
+                      const realPrice = await getReplayOptionPriceWithFallback(
+                        context,
+                        replaySession!,
+                        peContract.token,
+                        nowSec,
+                        "PE",
+                        atmStrike,
+                        lastCandle.close
+                      );
+                      optionEntryPrice = realPrice;
 
-            const contracts = await angelInstrumentProvider.getOptionContracts({
-              symbol: (context.strategy as any).symbol,
-              expiry: trade.expiry,
-            });
+                      await addStrategyLog(
+                        context,
+                        `[VALIDATION]\nUnderlying Price: ${lastCandle.close}\nOption Price: ${optionEntryPrice}\nStrike: ${atmStrike}`
+                      );
 
-            if (contracts.length > 0) {
-              const strikes = [...new Set(contracts.map(c => c.strike))].sort((a, b) => a - b);
-              const firstStrike = strikes[0] || 0;
-              const atmStrike = strikes.reduce((nearest, strike) => {
-                if (nearest === undefined) return strike;
-                return Math.abs(strike - underlyingLtp) < Math.abs(nearest - underlyingLtp) ? strike : nearest;
-              }, firstStrike);
+                      // Strict entry guard
+                      if (!peContract.token || !optionEntryPrice) {
+                        await addStrategyLog(context, `[ERROR] Strict entry guard failed. token: ${peContract.token}, price: ${optionEntryPrice}`);
+                        return;
+                      }
 
-              const ceContract = contracts.find(c => c.strike === atmStrike && c.optionType === "CE");
-              if (ceContract) {
-                let optionEntryPrice = underlyingLtp * 0.01;
-                let positionId = "";
+                      if (state.putTrack.hasEnteredTrade) return;
+                      state.putTrack.hasEnteredTrade = true;
+                      context.strategy.state = state;
 
-                if (isReplay) {
-                  // Fetch real historical option candles for this CE contract
-                  const replayService = new ReplayServiceClass(context.app);
-                  const replayDate = new Date(Number(replaySession!.currentTime) * 1000)
-                    .toISOString().slice(0, 10);
-                  await replayService.fetchOptionCandles(replaySession!, ceContract.token, "NFO", replayDate);
-                  const realPrice = getOptionPriceAtTimeFn(replaySession!, ceContract.token, nowSec);
-                  if (realPrice !== null && realPrice > 0) {
-                    optionEntryPrice = realPrice;
-                  }
-
-                  await addStrategyLog(context,
-                    `[OPTION MAP] Underlying: ${underlyingLtp}, Strike: ${atmStrike}, Expiry: ${trade.expiry}, Symbol: ${ceContract.symbol}, Token: ${ceContract.token}, Price: ${optionEntryPrice}`);
-
-                  const paperService = new ReplayPaperService(replaySession!);
-                  const orderResult = await paperService.createOrder(context.strategy.userId, {
-                    strategyId: context.strategy.id,
-                    brokerAccountId: replaySession!.brokerAccountId,
-                    instrumentType: "OPTION",
-                    token: ceContract.token,
-                    symbol: ceContract.symbol,
-                    exchangeType: 2,
-                    exchange: "NFO",
-                    side: "BUY",
-                    quantity: trade.quantity,
-                    price: optionEntryPrice,
-                  });
-                  positionId = orderResult.id;
-                } else {
-                  const brokerAccount = await context.app.db.brokerAccount.findUnique({
-                    where: { id: brokerAccountId },
-                  });
-                  if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
-                    throw new AppError("Broker account session is missing", 400, "BROKER_SESSION_ERROR");
-                  }
-
-                  let livePrice = underlyingLtp * 0.01;
-                  try {
-                    const provider = new AngelMarketDataProvider();
-                    const ltpRes = await provider.getLtp({
-                      apiKey: brokerAccount.apiKey,
-                      accessToken: brokerAccount.accessToken,
-                      query: {
-                        brokerAccountId,
+                      const paperService = new ReplayPaperService(replaySession!);
+                      const orderResult = await paperService.createOrder(context.strategy.userId, {
+                        strategyId: context.strategy.id,
+                        brokerAccountId: replaySession!.brokerAccountId,
+                        instrumentType: "OPTION",
+                        token: peContract.token,
+                        symbol: peContract.symbol,
+                        exchangeType: 2,
                         exchange: "NFO",
-                        tradingsymbol: ceContract.symbol,
-                        symboltoken: ceContract.token,
-                      },
-                    });
-                    if (ltpRes && ltpRes.status && ltpRes.data && ltpRes.data.ltp) {
-                      livePrice = Number(ltpRes.data.ltp);
+                        side: "BUY",
+                        quantity: trade.quantity,
+                        price: optionEntryPrice,
+                      });
+                      positionId = orderResult.id;
+                    } else {
+                      const brokerAccount = await context.app.db.brokerAccount.findUnique({
+                        where: { id: brokerAccountId },
+                      });
+                      if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
+                        throw new AppError("Broker account session is missing", 400, "BROKER_SESSION_ERROR");
+                      }
+
+                      let livePrice = 0;
+                      try {
+                        const provider = new AngelMarketDataProvider();
+                        const ltpRes = await provider.getLtp({
+                          apiKey: brokerAccount.apiKey,
+                          accessToken: brokerAccount.accessToken,
+                          query: {
+                            brokerAccountId,
+                            exchange: "NFO",
+                            tradingsymbol: peContract.symbol,
+                            symboltoken: peContract.token,
+                          },
+                        });
+                        if (ltpRes && ltpRes.status && ltpRes.data && ltpRes.data.ltp) {
+                          livePrice = Number(ltpRes.data.ltp);
+                        }
+                      } catch (err) {
+                        context.app.log.error(err, `Failed to fetch live LTP for PE contract ${peContract.symbol}`);
+                      }
+
+                      if (!livePrice || livePrice <= 0) {
+                        await addStrategyLog(context, `[ERROR] Live option price not available for PE contract ${peContract.symbol}, skipping trade`);
+                        state.putTrack.waitingForConfirmation = false;
+                        state.putTrack.decisionCandle = null;
+                        context.strategy.state = state;
+                        await updateStrategyState(context, state);
+                        return;
+                      }
+                      optionEntryPrice = livePrice;
+
+                      await addStrategyLog(
+                        context,
+                        `[VALIDATION]\nUnderlying Price: ${lastCandle.close}\nOption Price: ${optionEntryPrice}\nStrike: ${atmStrike}`
+                      );
+
+                      // Strict entry guard
+                      if (!peContract.token || !optionEntryPrice) {
+                        await addStrategyLog(context, `[ERROR] Strict entry guard failed. token: ${peContract.token}, price: ${optionEntryPrice}`);
+                        return;
+                      }
+
+                      if (state.putTrack.hasEnteredTrade) return;
+                      state.putTrack.hasEnteredTrade = true;
+                      context.strategy.state = state;
+
+                      const paperService = new PaperTradingService(context.app.db);
+                      const orderResult = await paperService.createOrder(context.strategy.userId, {
+                        strategyId: context.strategy.id,
+                        brokerAccountId,
+                        instrumentType: "OPTION",
+                        token: peContract.token,
+                        symbol: peContract.symbol,
+                        exchangeType: 2,
+                        exchange: "NFO",
+                        side: "BUY",
+                        quantity: trade.quantity,
+                        price: optionEntryPrice,
+                      });
+                      optionEntryPrice = orderResult.position.avgPrice;
+                      positionId = orderResult.position.id;
+
+                      liveMarketDataService.subscribe(context.strategy.userId, brokerAccountId, [
+                        { exchangeType: 2, tokens: [peContract.token] }
+                      ]);
                     }
-                  } catch (err) {
-                    context.app.log.error(err, `Failed to fetch live LTP for CE contract ${ceContract.symbol}`);
+
+                    const candleRange = decisionCandle.high - lastCandle.close;
+                    let stopLoss: number;
+                    let mode: string;
+                    if (candleRange < 10) {
+                      stopLoss = lastCandle.close + 10;
+                      mode = "FIXED_10";
+                    } else {
+                      stopLoss = decisionCandle.high;
+                      mode = "CANDLE_BASED";
+                    }
+
+                    await addStrategyLog(
+                      context,
+                      `[SL LOGIC]\nCandle Range: ${candleRange}\nApplied SL: ${stopLoss}\nMode: ${mode}`
+                    );
+
+                    const actualRisk = Math.abs(stopLoss - lastCandle.close);
+                    const riskValue = actualRisk * 0.5;
+                    const rewardRatio = risk?.rewardRatio || 3;
+                    const underlyingSL = stopLoss;
+                    const underlyingTarget = lastCandle.close - (rewardRatio * actualRisk);
+                    const optionTarget = optionEntryPrice + rewardRatio * riskValue;
+                    const optionSL = optionEntryPrice - riskValue;
+
+                    state.putTrack = {
+                      ...state.putTrack,
+                      isTradeOpen: true,
+                      waitingForConfirmation: false,
+                      currentPositionId: positionId,
+                      underlyingEntryPrice: lastCandle.close,
+                      optionToken: peContract.token,
+                      optionSymbol: peContract.symbol,
+                      optionEntryPrice,
+                      optionTarget,
+                      stopLoss: underlyingSL,
+                      decisionCandleHigh: decisionCandle.high,
+                      lastCandleTime: lastCandle.time,
+                      decisionCandle: null,
+                      strike: atmStrike,
+                      underlyingTarget,
+                    };
+                    context.strategy.state = state;
+                    await updateStrategyState(context, state);
+                    await addStrategyLog(context, `[ENTRY]\nTime: ${new Date(lastCandle.time * 1000).toISOString()}\nReason: Candle B broke Candle A low\nUnderlying: ${lastCandle.close}\nOption Entry: ₹${optionEntryPrice.toFixed(2)}`);
+                    await addStrategyLog(context, `[PLAN]\n\nUnderlying:\nEntry: ${lastCandle.close}\nStop Loss: ${underlyingSL}\nTarget: ${underlyingTarget.toFixed(2)}\n\nOption:\nEntry: ₹${optionEntryPrice.toFixed(2)}\nStop Loss: ₹${optionSL.toFixed(2)}\nTarget: ₹${optionTarget.toFixed(2)}\n\nRisk: ₹${riskValue.toFixed(2)}\nReward: ₹${(rewardRatio * riskValue).toFixed(2)}\nRR: 1:${rewardRatio}`);
                   }
-
-                  const paperService = new PaperTradingService(context.app.db);
-                  const orderResult = await paperService.createOrder(context.strategy.userId, {
-                    strategyId: context.strategy.id,
-                    brokerAccountId,
-                    instrumentType: "OPTION",
-                    token: ceContract.token,
-                    symbol: ceContract.symbol,
-                    exchangeType: 2,
-                    exchange: "NFO",
-                    side: "BUY",
-                    quantity: trade.quantity,
-                    price: livePrice,
-                  });
-                  optionEntryPrice = orderResult.position.avgPrice;
-                  positionId = orderResult.position.id;
-
-                  liveMarketDataService.subscribe(context.strategy.userId, brokerAccountId, [
-                    { exchangeType: 2, tokens: [ceContract.token] }
-                  ]);
                 }
-
-                const candleRange = underlyingLtp - state.callTrack.decisionCandle.low;
-                let stopLoss: number;
-                let mode: string;
-                if (candleRange < 10) {
-                  stopLoss = underlyingLtp - 10;
-                  mode = "FIXED_10";
-                } else {
-                  stopLoss = state.callTrack.decisionCandle.low;
-                  mode = "CANDLE_BASED";
-                }
-
-                await addStrategyLog(
-                  context,
-                  `[SL LOGIC]\nCandle Range: ${candleRange}\nApplied SL: ${stopLoss}\nMode: ${mode}`
-                );
-
-                const actualRisk = Math.abs(stopLoss - underlyingLtp);
-                const riskValue = actualRisk * 0.5;
-                const rewardRatio = risk?.rewardRatio || 3;
-                const underlyingSL = stopLoss;
-                const underlyingTarget = underlyingLtp + (rewardRatio * actualRisk);
-                const optionTarget = optionEntryPrice + rewardRatio * riskValue;
-                const optionSL = optionEntryPrice - riskValue;
-
-                state.callTrack = {
-                  ...state.callTrack,
-                  isTradeOpen: true,
-                  waitingForConfirmation: false,
-                  candleBStartLogged: false,
-                  currentPositionId: positionId,
-                  underlyingEntryPrice: underlyingLtp,
-                  optionToken: ceContract.token,
-                  optionSymbol: ceContract.symbol,
-                  optionEntryPrice,
-                  optionTarget,
-                  stopLoss: underlyingSL,
-                  decisionCandleLow: state.callTrack.decisionCandle.low,
-                  lastCandleTime: currentCandleTime,
-                  hasLoggedWaiting: false,
-                  hasLoggedCandleBStart: false,
-                };
+              } else {
+                await addStrategyLog(context, `[SKIPPED]\nReason: Candle B low (${lastCandle.low}) did not break Candle A low (${decisionCandle.low})`);
+                state.putTrack.waitingForConfirmation = false;
+                state.putTrack.decisionCandle = null;
+                context.strategy.state = state;
                 await updateStrategyState(context, state);
-                await addStrategyLog(context, `[ENTRY]\nUnderlying: ${underlyingLtp}\nOption Entry: ₹${optionEntryPrice.toFixed(2)}`);
-                await addStrategyLog(context, `[PLAN]\n\nUnderlying:\nEntry: ${underlyingLtp}\nStop Loss: ${underlyingSL}\nTarget: ${underlyingTarget.toFixed(2)}\n\nOption:\nEntry: ₹${optionEntryPrice.toFixed(2)}\nStop Loss: ₹${optionSL.toFixed(2)}\nTarget: ₹${optionTarget.toFixed(2)}\n\nRisk: ₹${riskValue.toFixed(2)}\nReward: ₹${(rewardRatio * riskValue).toFixed(2)}\nRR: 1:${rewardRatio}`);
+              }
+            }
+          } else {
+            const hasCrossed = lastCandle.high > state.putTrack.referenceHigh;
+            const isBearish = lastCandle.close < lastCandle.open;
+
+            if (hasCrossed && isBearish) {
+              await addStrategyLog(
+                context,
+                `[CANDLE A FOUND]\nTime: ${new Date(lastCandle.time * 1000).toISOString()}\nHigh: ${lastCandle.high}\nLow: ${lastCandle.low}\nClose: ${lastCandle.close}\nColor: RED`
+              );
+              state.putTrack.decisionCandle = {
+                time: lastCandle.time,
+                open: lastCandle.open,
+                high: lastCandle.high,
+                low: lastCandle.low,
+                close: lastCandle.close,
+              };
+              state.putTrack.decisionCandleHigh = lastCandle.high;
+              state.putTrack.waitingForConfirmation = true;
+              context.strategy.state = state;
+              await updateStrategyState(context, state);
+            } else {
+              if (hasCrossed && !isBearish) {
+                await addStrategyLog(context, `[SKIPPED]\nReason: Candle crossed referenceHigh but closed GREEN (not RED)`);
               }
             }
           }
         }
       }
+    }
 
-      // Step 1 — Detect Candle A (only check on closed candle when no trade is open and not waiting for confirmation)
-      if (!state.callTrack.isTradeOpen && !state.callTrack.waitingForConfirmation) {
-        const isNewClosedCandle = lastCandle.time !== state.callTrack.lastEvaluatedCandleTime;
-        if (isNewClosedCandle) {
+    // 5. Process CALL Track Entry
+    if (!state.callTrack.isTradeOpen) {
+      const candleIndex = closedCandles.length - 1;
+      const isNewClosedCandle = lastCandle.time !== (state.callTrack.lastProcessedCandleTime || 0);
+      if (isNewClosedCandle) {
+        state.callTrack.lastProcessedCandleTime = lastCandle.time;
+        state.callTrack.hasProcessedCandle = false;
+        state.callTrack.hasEnteredTrade = false;
+        context.strategy.state = state;
+        await updateStrategyState(context, state);
+
+        if (candleIndex < 2) {
           const hasCrossed = lastCandle.low < state.callTrack.referenceLow;
           const isBullish = lastCandle.close > lastCandle.open;
-
           if (hasCrossed && isBullish) {
-            await addStrategyLog(
-              context,
-              `[CANDLE A DETECTED] Time: ${new Date(lastCandle.time * 1000).toISOString()}, High: ${lastCandle.high}, Low: ${lastCandle.low}`
-            );
-            if (!state.callTrack.hasLoggedWaiting) {
-              await addStrategyLog(context, "[WAITING] Waiting for confirmation");
-              state.callTrack.hasLoggedWaiting = true;
+            await addStrategyLog(context, `[SKIPPED]\nReason: Breakout detected on early candle (candleIndex: ${candleIndex}) before 09:25`);
+          }
+        } else {
+          if (state.callTrack.hasProcessedCandle) return;
+          state.callTrack.hasProcessedCandle = true;
+          context.strategy.state = state;
+
+          if (state.callTrack.waitingForConfirmation) {
+            const decisionCandle = state.callTrack.decisionCandle;
+            if (lastCandle.time > decisionCandle.time + 300) {
+              await addStrategyLog(context, `[SKIPPED]\nReason: Missed Candle B window. Resetting state.`);
+              state.callTrack.waitingForConfirmation = false;
+              state.callTrack.decisionCandle = null;
+              context.strategy.state = state;
+              await updateStrategyState(context, state);
+            } else if (lastCandle.time === decisionCandle.time + 300) {
+              await addStrategyLog(
+                context,
+                `[CANDLE B CHECK]\nTime: ${new Date(lastCandle.time * 1000).toISOString()}\nDecisionHigh: ${decisionCandle.high}\nCurrentHigh: ${lastCandle.high}`
+              );
+
+              if (lastCandle.high > decisionCandle.high) {
+                const contracts = await angelInstrumentProvider.getOptionContracts({
+                  symbol: (context.strategy as any).symbol,
+                  expiry: trade.expiry,
+                });
+
+                if (contracts.length > 0) {
+                  const strikes = [...new Set(contracts.map(c => c.strike))].sort((a, b) => a - b);
+                  const firstStrike = strikes[0] || 0;
+                  const atmStrike = strikes.reduce((nearest, strike) => {
+                    if (nearest === undefined) return strike;
+                    return Math.abs(strike - lastCandle.close) < Math.abs(nearest - lastCandle.close) ? strike : nearest;
+                  }, firstStrike);
+
+                  const ceContract = contracts.find(c => c.strike === atmStrike && c.optionType === "CE");
+                  if (ceContract) {
+                    let optionEntryPrice = 0;
+                    let positionId = "";
+
+                    if (isReplay) {
+                      const realPrice = await getReplayOptionPriceWithFallback(
+                        context,
+                        replaySession!,
+                        ceContract.token,
+                        nowSec,
+                        "CE",
+                        atmStrike,
+                        lastCandle.close
+                      );
+                      optionEntryPrice = realPrice;
+
+                      await addStrategyLog(
+                        context,
+                        `[VALIDATION]\nUnderlying Price: ${lastCandle.close}\nOption Price: ${optionEntryPrice}\nStrike: ${atmStrike}`
+                      );
+
+                      // Strict entry guard
+                      if (!ceContract.token || !optionEntryPrice) {
+                        await addStrategyLog(context, `[ERROR] Strict entry guard failed. token: ${ceContract.token}, price: ${optionEntryPrice}`);
+                        return;
+                      }
+
+                      if (state.callTrack.hasEnteredTrade) return;
+                      state.callTrack.hasEnteredTrade = true;
+                      context.strategy.state = state;
+
+                      const paperService = new ReplayPaperService(replaySession!);
+                      const orderResult = await paperService.createOrder(context.strategy.userId, {
+                        strategyId: context.strategy.id,
+                        brokerAccountId: replaySession!.brokerAccountId,
+                        instrumentType: "OPTION",
+                        token: ceContract.token,
+                        symbol: ceContract.symbol,
+                        exchangeType: 2,
+                        exchange: "NFO",
+                        side: "BUY",
+                        quantity: trade.quantity,
+                        price: optionEntryPrice,
+                      });
+                      positionId = orderResult.id;
+                    } else {
+                      const brokerAccount = await context.app.db.brokerAccount.findUnique({
+                        where: { id: brokerAccountId },
+                      });
+                      if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
+                        throw new AppError("Broker account session is missing", 400, "BROKER_SESSION_ERROR");
+                      }
+
+                      let livePrice = 0;
+                      try {
+                        const provider = new AngelMarketDataProvider();
+                        const ltpRes = await provider.getLtp({
+                          apiKey: brokerAccount.apiKey,
+                          accessToken: brokerAccount.accessToken,
+                          query: {
+                            brokerAccountId,
+                            exchange: "NFO",
+                            tradingsymbol: ceContract.symbol,
+                            symboltoken: ceContract.token,
+                          },
+                        });
+                        if (ltpRes && ltpRes.status && ltpRes.data && ltpRes.data.ltp) {
+                          livePrice = Number(ltpRes.data.ltp);
+                        }
+                      } catch (err) {
+                        context.app.log.error(err, `Failed to fetch live LTP for CE contract ${ceContract.symbol}`);
+                      }
+
+                      if (!livePrice || livePrice <= 0) {
+                        await addStrategyLog(context, `[ERROR] Live option price not available for CE contract ${ceContract.symbol}, skipping trade`);
+                        state.callTrack.waitingForConfirmation = false;
+                        state.callTrack.decisionCandle = null;
+                        context.strategy.state = state;
+                        await updateStrategyState(context, state);
+                        return;
+                      }
+                      optionEntryPrice = livePrice;
+
+                      await addStrategyLog(
+                        context,
+                        `[VALIDATION]\nUnderlying Price: ${lastCandle.close}\nOption Price: ${optionEntryPrice}\nStrike: ${atmStrike}`
+                      );
+
+                      // Strict entry guard
+                      if (!ceContract.token || !optionEntryPrice) {
+                        await addStrategyLog(context, `[ERROR] Strict entry guard failed. token: ${ceContract.token}, price: ${optionEntryPrice}`);
+                        return;
+                      }
+
+                      if (state.callTrack.hasEnteredTrade) return;
+                      state.callTrack.hasEnteredTrade = true;
+                      context.strategy.state = state;
+
+                      const paperService = new PaperTradingService(context.app.db);
+                      const orderResult = await paperService.createOrder(context.strategy.userId, {
+                        strategyId: context.strategy.id,
+                        brokerAccountId,
+                        instrumentType: "OPTION",
+                        token: ceContract.token,
+                        symbol: ceContract.symbol,
+                        exchangeType: 2,
+                        exchange: "NFO",
+                        side: "BUY",
+                        quantity: trade.quantity,
+                        price: optionEntryPrice,
+                      });
+                      optionEntryPrice = orderResult.position.avgPrice;
+                      positionId = orderResult.position.id;
+
+                      liveMarketDataService.subscribe(context.strategy.userId, brokerAccountId, [
+                        { exchangeType: 2, tokens: [ceContract.token] }
+                      ]);
+                    }
+
+                    const candleRange = lastCandle.close - decisionCandle.low;
+                    let stopLoss: number;
+                    let mode: string;
+                    if (candleRange < 10) {
+                      stopLoss = lastCandle.close - 10;
+                      mode = "FIXED_10";
+                    } else {
+                      stopLoss = decisionCandle.low;
+                      mode = "CANDLE_BASED";
+                    }
+
+                    await addStrategyLog(
+                      context,
+                      `[SL LOGIC]\nCandle Range: ${candleRange}\nApplied SL: ${stopLoss}\nMode: ${mode}`
+                    );
+
+                    const actualRisk = Math.abs(stopLoss - lastCandle.close);
+                    const riskValue = actualRisk * 0.5;
+                    const rewardRatio = risk?.rewardRatio || 3;
+                    const underlyingSL = stopLoss;
+                    const underlyingTarget = lastCandle.close + (rewardRatio * actualRisk);
+                    const optionTarget = optionEntryPrice + rewardRatio * riskValue;
+                    const optionSL = optionEntryPrice - riskValue;
+
+                    state.callTrack = {
+                      ...state.callTrack,
+                      isTradeOpen: true,
+                      waitingForConfirmation: false,
+                      currentPositionId: positionId,
+                      underlyingEntryPrice: lastCandle.close,
+                      optionToken: ceContract.token,
+                      optionSymbol: ceContract.symbol,
+                      optionEntryPrice,
+                      optionTarget,
+                      stopLoss: underlyingSL,
+                      decisionCandleLow: decisionCandle.low,
+                      lastCandleTime: lastCandle.time,
+                      decisionCandle: null,
+                      strike: atmStrike,
+                      underlyingTarget,
+                    };
+                    context.strategy.state = state;
+                    await updateStrategyState(context, state);
+                    await addStrategyLog(context, `[ENTRY]\nTime: ${new Date(lastCandle.time * 1000).toISOString()}\nReason: Candle B broke Candle A high\nUnderlying: ${lastCandle.close}\nOption Entry: ₹${optionEntryPrice.toFixed(2)}`);
+                    await addStrategyLog(context, `[PLAN]\n\nUnderlying:\nEntry: ${lastCandle.close}\nStop Loss: ${underlyingSL}\nTarget: ${underlyingTarget.toFixed(2)}\n\nOption:\nEntry: ₹${optionEntryPrice.toFixed(2)}\nStop Loss: ₹${optionSL.toFixed(2)}\nTarget: ₹${optionTarget.toFixed(2)}\n\nRisk: ₹${riskValue.toFixed(2)}\nReward: ₹${(rewardRatio * riskValue).toFixed(2)}\nRR: 1:${rewardRatio}`);
+                  }
+                }
+              } else {
+                await addStrategyLog(context, `[SKIPPED]\nReason: Candle B high (${lastCandle.high}) did not break Candle A high (${decisionCandle.high})`);
+                state.callTrack.waitingForConfirmation = false;
+                state.callTrack.decisionCandle = null;
+                context.strategy.state = state;
+                await updateStrategyState(context, state);
+              }
             }
-            state.callTrack.decisionCandle = {
-              time: lastCandle.time,
-              open: lastCandle.open,
-              high: lastCandle.high,
-              low: lastCandle.low,
-              close: lastCandle.close,
-            };
-            state.callTrack.decisionCandleLow = lastCandle.low;
-            state.callTrack.waitingForConfirmation = true;
-            state.callTrack.lastEvaluatedCandleTime = lastCandle.time;
-            await updateStrategyState(context, state);
           } else {
-            state.callTrack.lastEvaluatedCandleTime = lastCandle.time;
-            await updateStrategyState(context, state);
+            const hasCrossed = lastCandle.low < state.callTrack.referenceLow;
+            const isBullish = lastCandle.close > lastCandle.open;
+
+            if (hasCrossed && isBullish) {
+              await addStrategyLog(
+                context,
+                `[CANDLE A FOUND]\nTime: ${new Date(lastCandle.time * 1000).toISOString()}\nHigh: ${lastCandle.high}\nLow: ${lastCandle.low}\nClose: ${lastCandle.close}\nColor: GREEN`
+              );
+              state.callTrack.decisionCandle = {
+                time: lastCandle.time,
+                open: lastCandle.open,
+                high: lastCandle.high,
+                low: lastCandle.low,
+                close: lastCandle.close,
+              };
+              state.callTrack.decisionCandleLow = lastCandle.low;
+              state.callTrack.waitingForConfirmation = true;
+              context.strategy.state = state;
+              await updateStrategyState(context, state);
+            } else {
+              if (hasCrossed && !isBullish) {
+                await addStrategyLog(context, `[SKIPPED]\nReason: Candle crossed referenceLow but closed RED (not GREEN)`);
+              }
+            }
           }
         }
       }

@@ -156,24 +156,75 @@ export const StrategyDetails: React.FC = () => {
     }
   }
 
-  // Draw Reference High and Reference Low lines for HIGH_LOW_BREAKOUT_REVERSAL
+  // Draw Reference, Yesterday, Decision Candle, and Day High/Low lines for HIGH_LOW_BREAKOUT_REVERSAL
   if (strategy.strategyType === "HIGH_LOW_BREAKOUT_REVERSAL") {
-    const state = strategy.state as any;
+    const state = (strategy.state || runtimeStatus?.state) as any;
     if (state) {
-      if (state.putTrack && state.putTrack.referenceHigh !== undefined && state.putTrack.referenceHigh !== null) {
-        priceLines.push({
-          price: state.putTrack.referenceHigh,
-          title: "Ref High (PUT)",
-          color: "#f87171", // red-400
-        });
+      const linesToAdd: { price: number; title: string; color: string }[] = [];
+
+      const addPriceLine = (price: number | undefined | null, title: string, color: string) => {
+        if (price === undefined || price === null || price <= 0) return;
+        const exists = linesToAdd.some((l) => Math.abs(l.price - price) < 0.01);
+        if (!exists) {
+          linesToAdd.push({ price, title, color });
+        } else {
+          const idx = linesToAdd.findIndex((l) => Math.abs(l.price - price) < 0.01);
+          const existingLine = linesToAdd[idx];
+          if (idx !== -1 && existingLine && !existingLine.title.includes(title)) {
+            existingLine.title = `${existingLine.title} / ${title}`;
+          }
+        }
+      };
+
+      // 1. Yesterday's High / Low
+      const yesterdayHighVal = state.yesterdayHigh || state.putTrack?.yesterdayHigh;
+      const yesterdayLowVal = state.yesterdayLow || state.callTrack?.yesterdayLow;
+
+      if (yesterdayHighVal) {
+        addPriceLine(yesterdayHighVal, "Yest. High", "#f43f5e"); // rose-500
+      } else if (state.putTrack?.referenceHigh && !state.putTrack?.decisionCandleHigh) {
+        addPriceLine(state.putTrack?.referenceHigh, "Yest. High", "#f43f5e");
       }
-      if (state.callTrack && state.callTrack.referenceLow !== undefined && state.callTrack.referenceLow !== null) {
-        priceLines.push({
-          price: state.callTrack.referenceLow,
-          title: "Ref Low (CALL)",
-          color: "#4ade80", // green-400
-        });
+
+      if (yesterdayLowVal) {
+        addPriceLine(yesterdayLowVal, "Yest. Low", "#10b981"); // emerald-500
+      } else if (state.callTrack?.referenceLow && !state.callTrack?.decisionCandleLow) {
+        addPriceLine(state.callTrack?.referenceLow, "Yest. Low", "#10b981");
       }
+
+      // 2. Reference High / Low (Current Trigger level)
+      if (state.putTrack?.referenceHigh) {
+        addPriceLine(state.putTrack?.referenceHigh, "Ref High", "#f87171"); // red-400
+      }
+      if (state.callTrack?.referenceLow) {
+        addPriceLine(state.callTrack?.referenceLow, "Ref Low", "#4ade80"); // green-400
+      }
+
+      // 3. Decision Candle High / Low (Trade SL)
+      if (state.putTrack?.decisionCandleHigh) {
+        addPriceLine(state.putTrack?.decisionCandleHigh, "Dec. High", "#a855f7"); // purple-500
+      }
+      if (state.callTrack?.decisionCandleLow) {
+        addPriceLine(state.callTrack?.decisionCandleLow, "Dec. Low", "#a855f7"); // purple-500
+      }
+
+      // 4. Current Day's High / Low
+      if (candles && candles.length > 0) {
+        let dayHigh = -Infinity;
+        let dayLow = Infinity;
+        candles.forEach((c) => {
+          if (c.high > dayHigh) dayHigh = c.high;
+          if (c.low < dayLow) dayLow = c.low;
+        });
+        if (dayHigh !== -Infinity && dayHigh > 0) {
+          addPriceLine(dayHigh, "Day High", "#eab308"); // yellow-500
+        }
+        if (dayLow !== Infinity && dayLow > 0) {
+          addPriceLine(dayLow, "Day Low", "#eab308"); // yellow-500
+        }
+      }
+
+      priceLines.push(...linesToAdd);
     }
   }
 
@@ -212,19 +263,35 @@ export const StrategyDetails: React.FC = () => {
     if (chronological.length === 0 || candlesList.length === 0) return [];
 
     const markersList: ChartMarker[] = [];
-    const firstOrder = chronological[0];
-    if (!firstOrder) return [];
+    const activePositions: { [symbol: string]: { side: string; qty: number } } = {};
 
-    const entrySide = formatTradeSide(firstOrder.side);
-
-    chronological.forEach((order, index) => {
+    chronological.forEach((order) => {
       const orderTimeSec = Math.floor(new Date(order.createdAt).getTime() / 1000);
       const nearestTime = findNearestCandleTime(orderTimeSec, candlesList);
       if (nearestTime === null) return;
 
       const orderSide = formatTradeSide(order.side);
-      const isEntry = index === 0;
-      const isExit = orderSide !== entrySide;
+      const symbol = order.symbol;
+      
+      const posState = activePositions[symbol] || { side: orderSide, qty: 0 };
+      
+      let isEntry = false;
+      let isExit = false;
+
+      if (posState.qty === 0) {
+        isEntry = true;
+        posState.side = orderSide;
+        posState.qty = order.quantity;
+      } else {
+        if (orderSide === posState.side) {
+          isEntry = true;
+          posState.qty += order.quantity;
+        } else {
+          isExit = true;
+          posState.qty = Math.max(0, posState.qty - order.quantity);
+        }
+      }
+      activePositions[symbol] = posState;
 
       let text = "";
       let position: "aboveBar" | "belowBar" = "belowBar";

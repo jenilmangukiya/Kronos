@@ -146,6 +146,7 @@ export class PaperTradingService {
           quantity: position.quantity,
           price: livePrice,
           status: "FILLED",
+          strategyId: position.strategyId,
         },
       });
 

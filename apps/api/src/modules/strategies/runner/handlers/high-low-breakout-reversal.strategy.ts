@@ -517,8 +517,12 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
       state = {
         ...state,
         lastLoggedCandleTime: 0,
+        yesterdayHigh,
+        yesterdayLow,
         putTrack: {
           referenceHigh: yesterdayHigh,
+          yesterdayHigh,
+          yesterdayLow,
           waitingForConfirmation: false,
           decisionCandle: null,
           isTradeOpen: false,
@@ -529,6 +533,8 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
         },
         callTrack: {
           referenceLow: yesterdayLow,
+          yesterdayHigh,
+          yesterdayLow,
           waitingForConfirmation: false,
           decisionCandle: null,
           isTradeOpen: false,

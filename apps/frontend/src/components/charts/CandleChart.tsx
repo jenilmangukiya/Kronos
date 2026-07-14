@@ -46,6 +46,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
+  const isInitialFitRef = useRef(false);
 
   useEffect(() => {
     const container = chartContainerRef.current;
@@ -127,6 +128,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       }));
       series.setData(formattedData);
       chart.timeScale().fitContent();
+      isInitialFitRef.current = true;
     }
 
     // Set up ResizeObserver to handle width changes dynamically
@@ -152,6 +154,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      isInitialFitRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [height]);
@@ -159,6 +162,11 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   // Update data dynamically on candles updates
   useEffect(() => {
     if (seriesRef.current && chartRef.current) {
+      if (candles.length === 0) {
+        isInitialFitRef.current = false;
+        seriesRef.current.setData([]);
+        return;
+      }
       const formattedData = candles.map((c) => ({
         time: (typeof c.time === "string" ? Math.floor(new Date(c.time).getTime() / 1000) : c.time) as UTCTimestamp,
         open: c.open,
@@ -167,8 +175,9 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         close: c.close,
       }));
       seriesRef.current.setData(formattedData);
-      if (candles.length > 0) {
+      if (candles.length > 0 && !isInitialFitRef.current) {
         chartRef.current.timeScale().fitContent();
+        isInitialFitRef.current = true;
       }
     }
   }, [candles]);

@@ -262,11 +262,11 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
       session.positions.forEach((pos) => {
         const isClosed = pos.status === "CLOSED";
         const isLong = pos.side === "LONG";
-        const ltp = pos.currentPrice;
+        const ltp = pos.currentPrice ?? 0;
         const expectedPnL = isLong
           ? (ltp - pos.entryPrice) * pos.quantity
           : (pos.entryPrice - ltp) * pos.quantity;
-        const actualPnL = pos.pnl;
+        const actualPnL = pos.pnl ?? 0;
         console.log({
           entryPrice: pos.entryPrice,
           exitPrice: isClosed ? pos.currentPrice : null,
@@ -294,18 +294,23 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
     }
   };
 
-  // Declarative polling effect depending on running status
+  // Poll session status exactly once on mount to handle page refreshes
   useEffect(() => {
     pollSession();
+  }, []);
+
+  // Poll current session status dynamically only when a replay session is running
+  useEffect(() => {
+    if (!session?.isRunning) return;
 
     // Fast poll (2000ms) when running, slow poll (5000ms) when paused or stopped
-    const intervalTime = session?.isRunning ? 2000 : 5000;
+    const intervalTime = session?.isPaused ? 5000 : 2000;
     const interval = setInterval(pollSession, intervalTime);
 
     return () => {
       clearInterval(interval);
     };
-  }, [session?.isRunning]);
+  }, [session?.isRunning, session?.isPaused]);
 
   const filteredLogs = session
     ? session.logs.filter((log) => {
@@ -769,11 +774,11 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
                     {[...session.positions].reverse().map((pos) => {
                       const isClosed = pos.status === "CLOSED";
                       const isLong = pos.side === "LONG";
-                      const ltp = pos.currentPrice;
+                      const ltp = pos.currentPrice ?? 0;
                       const expectedPnL = isLong
                         ? (ltp - pos.entryPrice) * pos.quantity
                         : (pos.entryPrice - ltp) * pos.quantity;
-                      const actualPnL = pos.pnl;
+                      const actualPnL = pos.pnl ?? 0;
                       const exitPrice = isClosed ? pos.currentPrice : null;
 
                       const absDiff = Math.abs(expectedPnL - actualPnL);

@@ -92,6 +92,8 @@ export const HighLowBreakoutReversalConfig = {
     // Find positions
     const putPos = positions.find(p => p.id === putTrack.currentPositionId && p.status === "OPEN");
     const callPos = positions.find(p => p.id === callTrack.currentPositionId && p.status === "OPEN");
+    const putPnL = putPos?.pnl ?? 0;
+    const callPnL = callPos?.pnl ?? 0;
 
     return (
       <div className="space-y-5 text-xs">
@@ -174,8 +176,8 @@ export const HighLowBreakoutReversalConfig = {
                 </div>
                 <div className="flex justify-between border-t border-red-900/20 pt-1 mt-1 font-bold">
                   <span>Unrealized PnL</span>
-                  <span className={`font-mono ${putPos ? (putPos.pnl >= 0 ? "text-emerald-400" : "text-red-400") : "text-slate-500"}`}>
-                    {putPos ? `₹${putPos.pnl.toFixed(2)}` : "₹0.00"}
+                  <span className={`font-mono ${putPos ? (putPnL >= 0 ? "text-emerald-400" : "text-red-400") : "text-slate-500"}`}>
+                    {putPos ? `₹${putPnL.toFixed(2)}` : "₹0.00"}
                   </span>
                 </div>
               </div>
@@ -230,8 +232,8 @@ export const HighLowBreakoutReversalConfig = {
                 </div>
                 <div className="flex justify-between border-t border-emerald-900/20 pt-1 mt-1 font-bold">
                   <span>Unrealized PnL</span>
-                  <span className={`font-mono ${callPos ? (callPos.pnl >= 0 ? "text-emerald-400" : "text-red-400") : "text-slate-500"}`}>
-                    {callPos ? `₹${callPos.pnl.toFixed(2)}` : "₹0.00"}
+                  <span className={`font-mono ${callPos ? (callPnL >= 0 ? "text-emerald-400" : "text-red-400") : "text-slate-500"}`}>
+                    {callPos ? `₹${callPnL.toFixed(2)}` : "₹0.00"}
                   </span>
                 </div>
               </div>

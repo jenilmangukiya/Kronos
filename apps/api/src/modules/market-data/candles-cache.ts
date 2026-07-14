@@ -5,7 +5,7 @@ interface CacheEntry {
 
 export class CandlesCache {
   private cache = new Map<string, CacheEntry>();
-  private readonly ttlMs = 15000; // 15 seconds TTL
+  private readonly ttlMs = 60000; // 60 seconds TTL
 
   private getKey(
     brokerAccountId: string,

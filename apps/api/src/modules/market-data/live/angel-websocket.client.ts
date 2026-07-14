@@ -18,8 +18,17 @@ export class AngelWebSocketClient {
   private ws: WebSocket | null = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private connectPromise: Promise<void> | null = null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private reconnectAttempts = 0;
+  private isClosingDeliberately = false;
+  private subscribedTokens: AngelSubscribeToken[] = [];
 
   constructor(private readonly params: AngelWebSocketClientParams) {}
+
+  updateCredentials(credentials: Partial<AngelWebSocketClientParams>) {
+    Object.assign(this.params, credentials);
+    console.log("[Angel WS] Updated credentials for clientCode:", this.params.clientCode);
+  }
 
   connect(): Promise<void> {
     if (this.ws?.readyState === WebSocket.OPEN) {
@@ -50,6 +59,8 @@ export class AngelWebSocketClient {
         clearTimeout(timeout);
 
         console.log("[Angel WS] Connected");
+        this.reconnectAttempts = 0;
+        this.isClosingDeliberately = false;
 
         this.startHeartbeat();
         resolve();
@@ -91,10 +102,37 @@ export class AngelWebSocketClient {
         this.stopHeartbeat();
         this.ws = null;
         this.connectPromise = null;
+
+        if (!this.isClosingDeliberately) {
+          this.triggerReconnect();
+        }
       });
     });
 
     return this.connectPromise;
+  }
+
+  private triggerReconnect() {
+    if (this.isClosingDeliberately) return;
+    if (this.reconnectTimer) return;
+
+    this.reconnectAttempts++;
+    const delay = Math.min(2000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
+    console.log(`[Angel WS] Reconnection attempt ${this.reconnectAttempts} in ${delay}ms...`);
+
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      try {
+        await this.connect();
+        console.log("[Angel WS] Reconnected successfully. Restoring subscriptions...");
+        if (this.subscribedTokens.length > 0) {
+          this.subscribe(this.subscribedTokens);
+        }
+      } catch (err: any) {
+        console.error(`[Angel WS] Reconnection attempt failed: ${err.message}`);
+        this.triggerReconnect();
+      }
+    }, delay);
   }
 
   isConnected() {
@@ -104,6 +142,19 @@ export class AngelWebSocketClient {
   subscribe(tokens: AngelSubscribeToken[]) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error("Angel WebSocket is not connected");
+    }
+
+    // Keep track of subscribed tokens to recover them on reconnect
+    for (const group of tokens) {
+      const existing = this.subscribedTokens.find((g) => g.exchangeType === group.exchangeType);
+      if (existing) {
+        existing.tokens = Array.from(new Set([...existing.tokens, ...group.tokens]));
+      } else {
+        this.subscribedTokens.push({
+          exchangeType: group.exchangeType,
+          tokens: [...group.tokens],
+        });
+      }
     }
 
     const message = {
@@ -125,6 +176,15 @@ export class AngelWebSocketClient {
       throw new Error("Angel WebSocket is not connected");
     }
 
+    // Keep track of unsubscribed tokens to keep subscribed list accurate
+    for (const group of tokens) {
+      const existing = this.subscribedTokens.find((g) => g.exchangeType === group.exchangeType);
+      if (existing) {
+        existing.tokens = existing.tokens.filter((t) => !group.tokens.includes(t));
+      }
+    }
+    this.subscribedTokens = this.subscribedTokens.filter((g) => g.tokens.length > 0);
+
     const message = {
       correlationID: `kronos-${Date.now()}`,
       action: 0,
@@ -140,6 +200,13 @@ export class AngelWebSocketClient {
   }
 
   close() {
+    this.isClosingDeliberately = true;
+    this.reconnectAttempts = 0;
+    this.subscribedTokens = [];
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.stopHeartbeat();
 
     if (this.ws) {

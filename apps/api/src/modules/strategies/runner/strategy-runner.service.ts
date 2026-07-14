@@ -5,6 +5,7 @@ import { strategyRegistry } from "./strategy-registry.js";
 import type { StrategyTrade } from "./handlers/types.js";
 import { liveTickStore } from "../../market-data/live/live-tick.store.js";
 import { realtimeService } from "../../realtime/realtime.service.js";
+import { liveMarketDataService } from "../../market-data/live/live-market-data.service.js";
 
 export class StrategyRunnerService {
   private interval: NodeJS.Timeout | null = null;
@@ -87,6 +88,27 @@ export class StrategyRunnerService {
         `[ERROR] No handler found for strategyType: ${strategy.strategyType}`,
       );
       return;
+    }
+
+    if (strategy.brokerAccountId) {
+      try {
+        const sessionStatus = liveMarketDataService.getStatus(strategy.userId, strategy.brokerAccountId);
+        if (!sessionStatus.connected) {
+          this.app.log.warn(`[Runner] Broker WS disconnected for strategy ${strategy.id}, reconnecting...`);
+          await liveMarketDataService.start(this.app, strategy.userId, strategy.brokerAccountId);
+          const subscriptions = handler.getRequiredSubscriptions(strategy);
+          liveMarketDataService.subscribe(strategy.userId, strategy.brokerAccountId, subscriptions as any);
+        }
+      } catch (err: any) {
+        this.app.log.warn(`[Runner] Broker WS session check failed for strategy ${strategy.id}, re-subscribing: ${err.message}`);
+        try {
+          await liveMarketDataService.start(this.app, strategy.userId, strategy.brokerAccountId);
+          const subscriptions = handler.getRequiredSubscriptions(strategy);
+          liveMarketDataService.subscribe(strategy.userId, strategy.brokerAccountId, subscriptions as any);
+        } catch (startErr: any) {
+          this.app.log.error(startErr, `[Runner] Auto-reconnect failed for strategy ${strategy.id}`);
+        }
+      }
     }
 
     this.app.log.info(

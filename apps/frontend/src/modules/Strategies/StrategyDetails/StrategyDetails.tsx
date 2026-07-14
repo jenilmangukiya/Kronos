@@ -457,7 +457,7 @@ export const StrategyDetails: React.FC = () => {
               <div>
                 <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                   <LineChart className="h-4.5 w-4.5 text-indigo-400" />
-                  {strategy.trade?.symbol || "Strategy"} 5m Candles
+                  {(strategy.strategyType === "HIGH_LOW_BREAKOUT_REVERSAL" ? strategy.symbol : (strategy.trade?.symbol || "Strategy"))} 5m Candles
                 </h3>
                 <p className="text-slate-500 text-[10px] mt-0.5">
                   Refreshing every 30 seconds
@@ -472,7 +472,7 @@ export const StrategyDetails: React.FC = () => {
             </div>
 
             <div className="flex-grow flex flex-col justify-center min-h-[300px]">
-              {!strategy.trade?.token ? (
+              {!(strategy.strategyType === "HIGH_LOW_BREAKOUT_REVERSAL" ? strategy.rules?.underlyingToken : strategy.trade?.token) ? (
                 <div className="flex flex-col items-center justify-center h-[300px] border border-slate-800 rounded-xl bg-slate-950/20 text-slate-400 text-xs space-y-2">
                   <AlertCircle className="h-8 w-8 text-slate-500" />
                   <span>Select a trade instrument to view candles</span>

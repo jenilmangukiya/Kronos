@@ -107,9 +107,27 @@ async function get1MinuteCandles(
   if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
     throw new AppError("Broker account session is missing", 400, "BROKER_SESSION_ERROR");
   }
-  const todayStr = currentTime.toISOString().slice(0, 10);
-  const fromDateStr = `${todayStr} 09:15`;
-  const toDateStr = `${todayStr} 15:30`;
+  const formatKolkata = (date: Date) => {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(date);
+    const getVal = (type: string) => parts.find((p) => p.type === type)?.value || "";
+    return {
+      dateStr: `${getVal("year")}-${getVal("month")}-${getVal("day")}`,
+      timeStr: `${getVal("hour")}:${getVal("minute")}`,
+    };
+  };
+
+  const kolkataTime = formatKolkata(currentTime);
+  const toDateStr = `${kolkataTime.dateStr} ${kolkataTime.timeStr}`;
+  const fromDateStr = `${kolkataTime.dateStr} 09:15`;
 
   const cached = candlesCache.get(
     brokerAccountId,
@@ -189,15 +207,20 @@ async function getYesterdayHighLow(
   const fromDate = new Date(currentDate);
   fromDate.setDate(fromDate.getDate() - 10);
 
-  const formatDate = (d: Date) => {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
+  const getKolkataDateOnly = (date: Date) => {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const parts = formatter.formatToParts(date);
+    const getVal = (type: string) => parts.find((p) => p.type === type)?.value || "";
+    return `${getVal("year")}-${getVal("month")}-${getVal("day")}`;
   };
 
-  const fromDateStr = `${formatDate(fromDate)} 09:15`;
-  const toDateStr = `${formatDate(toDate)} 15:30`;
+  const fromDateStr = `${getKolkataDateOnly(fromDate)} 09:15`;
+  const toDateStr = `${getKolkataDateOnly(toDate)} 15:30`;
 
   const provider = new AngelMarketDataProvider();
   const response = await provider.getCandles({
@@ -587,7 +610,44 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
     if (isReplay) {
       candles1m = replaySession!.candles;
     } else {
-      candles1m = await get1MinuteCandles(context.app, brokerAccountId, exchange, underlyingToken, currentTime);
+      try {
+        candles1m = await get1MinuteCandles(context.app, brokerAccountId, exchange, underlyingToken, currentTime);
+      } catch (err: any) {
+        // Check if this is an auth/session error
+        const isAuthError = (e: any): boolean => {
+          if (!e) return false;
+          const msg = String(e.message || "").toLowerCase();
+          const code = String(e.code || "").toLowerCase();
+          const status = e.statusCode || 0;
+          return (
+            status === 401 ||
+            status === 403 ||
+            msg.includes("401") ||
+            msg.includes("403") ||
+            msg.includes("session expired") ||
+            msg.includes("invalid token") ||
+            code.includes("session_expired") ||
+            code.includes("token_expired")
+          );
+        };
+
+        if (isAuthError(err)) {
+          context.app.log.error(err, `[Strategy Runner] Expired/Invalid broker session for strategy ${context.strategy.id}. Waiting for session recovery...`);
+          
+          // Throttled warning log to prevent spamming DB logs
+          const now = Date.now();
+          const lastLogged = state.lastLoggedErrorTime || 0;
+          if (now - lastLogged > 5 * 60 * 1000) {
+            state.lastLoggedErrorTime = now;
+            await updateStrategyState(context, state);
+            await addStrategyLog(context, "[WARNING] Broker session expired/invalid. Strategy remains running; it will resume automatically once you log back in.");
+          }
+        } else {
+          // Log transient errors as warnings to avoid crashing the runner loop
+          context.app.log.warn(`[Strategy Runner] Strategy ${context.strategy.id} candle fetch failed with transient error: ${err.message}`);
+        }
+        return; // Exit early since candles failed
+      }
     }
 
     const closedCandles = getFiveMinuteCandles(candles1m, currentTime.getTime() / 1000);

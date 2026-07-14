@@ -60,20 +60,31 @@ class LiveMarketDataService {
   async start(app: FastifyInstance, userId: string, brokerAccountId: string) {
     const existingSession = this.sessions.get(brokerAccountId);
 
-    if (existingSession?.client.isConnected()) {
+    if (existingSession) {
+      // Fetch fresh broker credentials from the database in case the session was regenerated
+      const brokerAccount = await app.db.brokerAccount.findUnique({
+        where: { id: brokerAccountId },
+      });
+      if (brokerAccount) {
+        existingSession.client.updateCredentials({
+          accessToken: brokerAccount.accessToken ?? undefined,
+          feedToken: brokerAccount.feedToken ?? undefined,
+          apiKey: brokerAccount.apiKey ?? undefined,
+          clientCode: brokerAccount.clientId ?? undefined,
+        });
+      }
+
+      if (!existingSession.client.isConnected()) {
+        await existingSession.client.connect();
+      }
+
       this.touch(brokerAccountId);
 
       return {
         success: true,
-        message: "Angel WebSocket already connected",
+        message: "Angel WebSocket connected/refreshed",
         brokerAccountId,
       };
-    }
-
-    if (existingSession && !existingSession.client.isConnected()) {
-      existingSession.client.close();
-      this.sessions.delete(brokerAccountId);
-      liveTickStore.clearBroker(brokerAccountId);
     }
 
     const brokerAccount = await app.db.brokerAccount.findFirst({

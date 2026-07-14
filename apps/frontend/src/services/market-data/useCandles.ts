@@ -8,8 +8,9 @@ export const useStrategyCandles = (
   options?: Partial<UseQueryOptions<Candle[], AxiosError>>
 ) => {
   const brokerAccountId = strategy?.brokerAccountId;
-  const token = strategy?.trade?.token;
-  const exchange = strategy?.trade?.exchange;
+  const isHighLow = strategy?.strategyType === "HIGH_LOW_BREAKOUT_REVERSAL";
+  const token = isHighLow ? strategy?.rules?.underlyingToken : strategy?.trade?.token;
+  const exchange = isHighLow ? strategy?.rules?.underlyingExchange : strategy?.trade?.exchange;
 
   const isEnabled = Boolean(
     brokerAccountId &&

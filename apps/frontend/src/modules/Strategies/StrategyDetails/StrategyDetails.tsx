@@ -476,7 +476,7 @@ export const StrategyDetails: React.FC = () => {
         {/* Bottom Controls Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
           {/* Live Price Card */}
-          <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col justify-between h-full">
+          <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col h-full">
             <div className="flex flex-col gap-1 border-b border-slate-800/80 pb-2 mb-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
@@ -503,7 +503,7 @@ export const StrategyDetails: React.FC = () => {
               </span>
             </div>
 
-            <div className="flex-grow flex flex-col justify-center py-6">
+            <div className="py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <span className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Underlying LTP</span>
@@ -551,7 +551,7 @@ export const StrategyDetails: React.FC = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-800/40 text-xs mt-3">
+            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-800/40 text-xs mt-auto">
               <div>
                 <span className="text-slate-400 block text-[10px] font-semibold uppercase tracking-wider">Rule Type</span>
                 <span className="text-slate-200 font-semibold mt-0.5 block truncate" title={formatRuleType(ruleType)}>
@@ -654,15 +654,6 @@ export const StrategyDetails: React.FC = () => {
           />
         </div>
       </div>
-
-      {/* Replay Dev Panel (Dev-only) */}
-      {import.meta.env.DEV === true && (
-        <ReplayDevPanel
-          strategyId={strategy.id}
-          brokerAccountId={strategy.brokerAccountId || ""}
-          symbol={strategy.symbol}
-        />
-      )}
 
       {/* Position Section */}
       <Card className="border-slate-800 bg-slate-950 p-4">
@@ -925,6 +916,15 @@ export const StrategyDetails: React.FC = () => {
           </div>
         )}
       </Card>
+
+      {/* Replay Dev Panel (Dev-only) */}
+      {import.meta.env.DEV === true && (
+        <ReplayDevPanel
+          strategyId={strategy.id}
+          brokerAccountId={strategy.brokerAccountId || ""}
+          symbol={strategy.symbol}
+        />
+      )}
     </div>
   );
 };

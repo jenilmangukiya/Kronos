@@ -647,7 +647,7 @@ export const ReplayDevPanel: React.FC<ReplayDevPanelProps> = ({
         <div className="space-y-2">
           <label className="text-[10px] uppercase font-extrabold text-slate-500 tracking-wider">Replay Speed</label>
           <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-0.5">
-            {[1, 5, 10, 20].map((s) => (
+            {[1, 5, 10].map((s) => (
               <button
                 key={s}
                 disabled={isReplayRunning}

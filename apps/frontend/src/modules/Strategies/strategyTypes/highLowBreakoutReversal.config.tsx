@@ -108,22 +108,30 @@ export const HighLowBreakoutReversalConfig = {
             )}
           </div>
           {lastCandle ? (
-            <div className="grid grid-cols-4 gap-2 text-center text-[11px] font-mono pt-1 text-slate-300">
-              <div className="bg-slate-900/60 p-1.5 rounded border border-slate-900/40">
-                <span className="text-[9px] text-slate-500 block uppercase font-bold">Open</span>
-                <span>₹{lastCandle.open.toLocaleString("en-IN")}</span>
+            <div className="grid grid-cols-2 gap-2.5 pt-1 text-center font-mono text-slate-300">
+              <div className="bg-slate-900/60 px-2 py-2.5 rounded-lg border border-slate-900/40 flex flex-col items-center justify-center min-w-0 shadow-sm">
+                <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider">Open</span>
+                <span className="text-xs font-bold text-slate-200 mt-1 truncate">
+                  ₹{Number(lastCandle.open).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
-              <div className="bg-slate-900/60 p-1.5 rounded border border-slate-900/40">
-                <span className="text-[9px] text-slate-500 block uppercase font-bold text-emerald-500/80">High</span>
-                <span>₹{lastCandle.high.toLocaleString("en-IN")}</span>
+              <div className="bg-slate-900/60 px-2 py-2.5 rounded-lg border border-slate-900/40 flex flex-col items-center justify-center min-w-0 shadow-sm">
+                <span className="text-[9px] text-emerald-500/80 uppercase font-black tracking-wider">High</span>
+                <span className="text-xs font-bold text-emerald-400 mt-1 truncate">
+                  ₹{Number(lastCandle.high).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
-              <div className="bg-slate-900/60 p-1.5 rounded border border-slate-900/40">
-                <span className="text-[9px] text-slate-500 block uppercase font-bold text-red-500/80">Low</span>
-                <span>₹{lastCandle.low.toLocaleString("en-IN")}</span>
+              <div className="bg-slate-900/60 px-2 py-2.5 rounded-lg border border-slate-900/40 flex flex-col items-center justify-center min-w-0 shadow-sm">
+                <span className="text-[9px] text-rose-500/80 uppercase font-black tracking-wider">Low</span>
+                <span className="text-xs font-bold text-rose-400 mt-1 truncate">
+                  ₹{Number(lastCandle.low).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
-              <div className="bg-slate-900/60 p-1.5 rounded border border-slate-900/40">
-                <span className="text-[9px] text-slate-500 block uppercase font-bold">Close</span>
-                <span>₹{lastCandle.close.toLocaleString("en-IN")}</span>
+              <div className="bg-slate-900/60 px-2 py-2.5 rounded-lg border border-slate-900/40 flex flex-col items-center justify-center min-w-0 shadow-sm">
+                <span className="text-[9px] text-slate-500 uppercase font-black tracking-wider">Close</span>
+                <span className="text-xs font-bold text-slate-200 mt-1 truncate">
+                  ₹{Number(lastCandle.close).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
           ) : (

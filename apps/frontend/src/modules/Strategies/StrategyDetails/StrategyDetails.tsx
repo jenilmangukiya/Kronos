@@ -30,6 +30,7 @@ import {
   formatReEntryMode,
 } from "./helpers";
 import { getStrategyTypeConfig } from "../strategyTypes";
+import { parseExpiryDate, getMarkersFromOrders } from "./utils";
 
 export const StrategyDetails: React.FC = () => {
   const {
@@ -229,125 +230,6 @@ export const StrategyDetails: React.FC = () => {
   }
 
   // Calculate entry/exit markers from filled strategy orders
-  const findNearestCandleTime = (orderTimeSec: number, candlesList: Candle[]): number | null => {
-    if (candlesList.length === 0) return null;
-    let nearestCandle = candlesList[0];
-    if (!nearestCandle) return null;
-    let minDiff = Math.abs(Number(nearestCandle.time) - orderTimeSec);
-    for (let i = 1; i < candlesList.length; i++) {
-      const candle = candlesList[i];
-      if (!candle) continue;
-      const diff = Math.abs(Number(candle.time) - orderTimeSec);
-      if (diff < minDiff) {
-        minDiff = diff;
-        nearestCandle = candle;
-      }
-    }
-    return Number(nearestCandle.time);
-  };
-
-  interface StrategyOrderSubset {
-    createdAt: string;
-    status: string;
-    side: string;
-    price: number;
-    symbol: string;
-    quantity: number;
-  }
-
-  const getMarkersFromOrders = (candlesList: Candle[], strategyOrdersList: StrategyOrderSubset[]): ChartMarker[] => {
-    const chronological = [...strategyOrdersList]
-      .filter((order) => order.status === "FILLED")
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    if (chronological.length === 0 || candlesList.length === 0) return [];
-
-    const markersList: ChartMarker[] = [];
-    const activePositions: { [symbol: string]: { side: string; qty: number } } = {};
-
-    chronological.forEach((order) => {
-      const orderTimeSec = Math.floor(new Date(order.createdAt).getTime() / 1000);
-      const nearestTime = findNearestCandleTime(orderTimeSec, candlesList);
-      if (nearestTime === null) return;
-
-      const orderSide = formatTradeSide(order.side);
-      const symbol = order.symbol;
-      
-      const posState = activePositions[symbol] || { side: orderSide, qty: 0 };
-      
-      let isEntry = false;
-      let isExit = false;
-
-      if (posState.qty === 0) {
-        isEntry = true;
-        posState.side = orderSide;
-        posState.qty = order.quantity;
-      } else {
-        if (orderSide === posState.side) {
-          isEntry = true;
-          posState.qty += order.quantity;
-        } else {
-          isExit = true;
-          posState.qty = Math.max(0, posState.qty - order.quantity);
-        }
-      }
-      activePositions[symbol] = posState;
-
-      let text = "";
-      let position: "aboveBar" | "belowBar" = "belowBar";
-      let shape: "arrowUp" | "arrowDown" | "circle" = "circle";
-      let color = "";
-
-      if (isEntry) {
-        if (orderSide === "BUY") {
-          text = `ENTRY BUY @ ${formatCurrency(order.price)}`;
-          position = "belowBar";
-          shape = "arrowUp";
-          color = "#10b981"; // green
-        } else {
-          text = `ENTRY SELL @ ${formatCurrency(order.price)}`;
-          position = "aboveBar";
-          shape = "arrowDown";
-          color = "#ef4444"; // red
-        }
-      } else if (isExit) {
-        if (orderSide === "BUY") {
-          text = `EXIT BUY @ ${formatCurrency(order.price)}`;
-          position = "belowBar";
-          shape = "circle";
-          color = "#a855f7"; // purple
-        } else {
-          text = `EXIT SELL @ ${formatCurrency(order.price)}`;
-          position = "aboveBar";
-          shape = "circle";
-          color = "#a855f7"; // purple
-        }
-      } else {
-        if (orderSide === "BUY") {
-          text = `BUY @ ${formatCurrency(order.price)}`;
-          position = "belowBar";
-          shape = "arrowUp";
-          color = "#10b981";
-        } else {
-          text = `SELL @ ${formatCurrency(order.price)}`;
-          position = "aboveBar";
-          shape = "arrowDown";
-          color = "#ef4444";
-        }
-      }
-
-      markersList.push({
-        time: nearestTime,
-        position,
-        shape,
-        text,
-        color,
-      });
-    });
-
-    return markersList;
-  };
-
   const markers = getMarkersFromOrders(candles, strategyOrders);
 
   // Live Price Calculation & Proximity Warning
@@ -435,6 +317,13 @@ export const StrategyDetails: React.FC = () => {
     conditionStatusVariant = priceState.badgeVariant;
   }
 
+  // Option expiry validation check
+  const expiryDate = parseExpiryDate(strategy.trade?.expiry);
+  const lastCandle = candles && candles.length > 0 ? candles[candles.length - 1] : null;
+  const lastCandleTime = lastCandle ? Number(lastCandle.time) : null;
+  const currentSessionDate = lastCandleTime ? new Date(lastCandleTime * 1000) : new Date();
+  const isExpiryExpired = expiryDate && expiryDate < currentSessionDate;
+
   // Create collapsible summary description in one line
   const strategyConfig = getStrategyTypeConfig(strategy.strategyType);
   const strategySpecificSummary = strategyConfig?.getSummaryText ? strategyConfig.getSummaryText(strategy) : "";
@@ -467,6 +356,19 @@ export const StrategyDetails: React.FC = () => {
           </button>
         </div>
       )}
+
+      {isExpiryExpired && (
+        <div className="bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm p-4 rounded-xl flex items-center gap-4 mb-6">
+          <AlertCircle className="h-5 w-5 text-rose-400 shrink-0 animate-pulse" />
+          <div>
+            <p className="font-semibold text-rose-200">Option Expiry Warning</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              The configured option expiry date (<span className="font-mono text-rose-400 font-bold">{strategy.trade?.expiry}</span>) has expired relative to the current execution date (<span className="font-mono text-slate-300 font-bold">{formatDate(currentSessionDate.toISOString())}</span>). Option contracts will fail to load and trade entries will be skipped. Please edit the strategy and update the option expiry date.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-800">
         <div>

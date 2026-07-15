@@ -1076,6 +1076,10 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                       // Strict entry guard
                       if (!peContract.token || !optionEntryPrice) {
                         await addStrategyLog(context, `[ERROR] Strict entry guard failed. token: ${peContract.token}, price: ${optionEntryPrice}`);
+                        state.putTrack.waitingForConfirmation = false;
+                        state.putTrack.decisionCandle = null;
+                        context.strategy.state = state;
+                        await updateStrategyState(context, state);
                         return;
                       }
 
@@ -1143,6 +1147,10 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                       // Strict entry guard
                       if (!peContract.token || !optionEntryPrice) {
                         await addStrategyLog(context, `[ERROR] Strict entry guard failed. token: ${peContract.token}, price: ${optionEntryPrice}`);
+                        state.putTrack.waitingForConfirmation = false;
+                        state.putTrack.decisionCandle = null;
+                        context.strategy.state = state;
+                        await updateStrategyState(context, state);
                         return;
                       }
 
@@ -1216,7 +1224,25 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                     await updateStrategyState(context, state);
                     await addStrategyLog(context, `[ENTRY]\nTime: ${new Date(lastCandle.time * 1000).toISOString()}\nReason: Candle B broke Candle A low\nUnderlying: ${lastCandle.close}\nOption Entry: ₹${optionEntryPrice.toFixed(2)}`);
                     await addStrategyLog(context, `[PLAN]\n\nUnderlying:\nEntry: ${lastCandle.close}\nStop Loss: ${underlyingSL}\nTarget: ${underlyingTarget.toFixed(2)}\n\nOption:\nEntry: ₹${optionEntryPrice.toFixed(2)}\nStop Loss: ₹${optionSL.toFixed(2)}\nTarget: ₹${optionTarget.toFixed(2)}\n\nRisk: ₹${riskValue.toFixed(2)}\nReward: ₹${(rewardRatio * riskValue).toFixed(2)}\nRR: 1:${rewardRatio}`);
+                  } else {
+                    await addStrategyLog(
+                      context,
+                      `[SKIPPED]\nReason: No PE option contract found for strike ${atmStrike} and expiry ${trade.expiry || "N/A"}. Resetting confirmation state.`
+                    );
+                    state.putTrack.waitingForConfirmation = false;
+                    state.putTrack.decisionCandle = null;
+                    context.strategy.state = state;
+                    await updateStrategyState(context, state);
                   }
+                } else {
+                  await addStrategyLog(
+                    context,
+                    `[SKIPPED]\nReason: No option contracts found for expiry ${trade.expiry || "N/A"}. Please check if the expiry has passed. Resetting confirmation state.`
+                  );
+                  state.putTrack.waitingForConfirmation = false;
+                  state.putTrack.decisionCandle = null;
+                  context.strategy.state = state;
+                  await updateStrategyState(context, state);
                 }
               } else {
                 await addStrategyLog(context, `[SKIPPED]\nReason: Candle B low (${lastCandle.low}) did not break Candle A low (${decisionCandle.low})`);
@@ -1331,6 +1357,10 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                       // Strict entry guard
                       if (!ceContract.token || !optionEntryPrice) {
                         await addStrategyLog(context, `[ERROR] Strict entry guard failed. token: ${ceContract.token}, price: ${optionEntryPrice}`);
+                        state.callTrack.waitingForConfirmation = false;
+                        state.callTrack.decisionCandle = null;
+                        context.strategy.state = state;
+                        await updateStrategyState(context, state);
                         return;
                       }
 
@@ -1398,6 +1428,10 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                       // Strict entry guard
                       if (!ceContract.token || !optionEntryPrice) {
                         await addStrategyLog(context, `[ERROR] Strict entry guard failed. token: ${ceContract.token}, price: ${optionEntryPrice}`);
+                        state.callTrack.waitingForConfirmation = false;
+                        state.callTrack.decisionCandle = null;
+                        context.strategy.state = state;
+                        await updateStrategyState(context, state);
                         return;
                       }
 
@@ -1471,7 +1505,25 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                     await updateStrategyState(context, state);
                     await addStrategyLog(context, `[ENTRY]\nTime: ${new Date(lastCandle.time * 1000).toISOString()}\nReason: Candle B broke Candle A high\nUnderlying: ${lastCandle.close}\nOption Entry: ₹${optionEntryPrice.toFixed(2)}`);
                     await addStrategyLog(context, `[PLAN]\n\nUnderlying:\nEntry: ${lastCandle.close}\nStop Loss: ${underlyingSL}\nTarget: ${underlyingTarget.toFixed(2)}\n\nOption:\nEntry: ₹${optionEntryPrice.toFixed(2)}\nStop Loss: ₹${optionSL.toFixed(2)}\nTarget: ₹${optionTarget.toFixed(2)}\n\nRisk: ₹${riskValue.toFixed(2)}\nReward: ₹${(rewardRatio * riskValue).toFixed(2)}\nRR: 1:${rewardRatio}`);
+                  } else {
+                    await addStrategyLog(
+                      context,
+                      `[SKIPPED]\nReason: No CE option contract found for strike ${atmStrike} and expiry ${trade.expiry || "N/A"}. Resetting confirmation state.`
+                    );
+                    state.callTrack.waitingForConfirmation = false;
+                    state.callTrack.decisionCandle = null;
+                    context.strategy.state = state;
+                    await updateStrategyState(context, state);
                   }
+                } else {
+                  await addStrategyLog(
+                    context,
+                    `[SKIPPED]\nReason: No option contracts found for expiry ${trade.expiry || "N/A"}. Please check if the expiry has passed. Resetting confirmation state.`
+                  );
+                  state.callTrack.waitingForConfirmation = false;
+                  state.callTrack.decisionCandle = null;
+                  context.strategy.state = state;
+                  await updateStrategyState(context, state);
                 }
               } else {
                 await addStrategyLog(context, `[SKIPPED]\nReason: Candle B high (${lastCandle.high}) did not break Candle A high (${decisionCandle.high})`);

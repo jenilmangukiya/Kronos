@@ -214,7 +214,7 @@ export const StrategyTradeForm: React.FC<StrategyTradeFormProps> = ({
         {/* Selected asset details preview and Strategy summary preview */}
         {form.tradeToken && form.tradeSymbol && (
           <div className="sm:col-span-2 space-y-4">
-            <div className="bg-slate-955/90 border border-slate-800/80 rounded-xl p-5 space-y-4 shadow-xl">
+            <div className="bg-slate-950/90 border border-slate-800/80 rounded-xl p-5 space-y-4 shadow-xl">
               <span className="font-bold text-slate-200 text-sm block border-b border-slate-800 pb-2 flex items-center gap-2">
                 {isFuture ? (
                   <>

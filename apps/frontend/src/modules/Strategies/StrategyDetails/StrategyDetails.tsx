@@ -574,35 +574,35 @@ export const StrategyDetails: React.FC = () => {
         {/* Bottom Controls Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
           {/* Live Price Card */}
-          <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col justify-between">
-            <div>
-              <div className="flex flex-col gap-1 border-b border-slate-800/80 pb-2 mb-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                    <Activity className="h-4.5 w-4.5 text-emerald-400" />
-                    Watch Price
-                  </h3>
-                  <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${
-                    priceState.badgeVariant === "success"
-                      ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-                      : priceState.badgeVariant === "danger"
-                      ? "text-rose-400 bg-rose-500/10 border-rose-500/20"
-                      : priceState.badgeVariant === "warning"
-                      ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
-                      : "text-slate-400 bg-slate-500/10 border-slate-800"
-                  }`}>
-                    {priceState.badgeVariant === "success" && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-                    )}
-                    {priceState.state}
-                  </span>
-                </div>
-                <span className="text-[10px] text-slate-500 font-medium">
-                  Used for entry condition
+          <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col justify-between h-full">
+            <div className="flex flex-col gap-1 border-b border-slate-800/80 pb-2 mb-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <Activity className="h-4.5 w-4.5 text-emerald-400" />
+                  Watch Price
+                </h3>
+                <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-semibold uppercase tracking-wider ${
+                  priceState.badgeVariant === "success"
+                    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                    : priceState.badgeVariant === "danger"
+                    ? "text-rose-400 bg-rose-500/10 border-rose-500/20"
+                    : priceState.badgeVariant === "warning"
+                    ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                    : "text-slate-400 bg-slate-500/10 border-slate-800"
+                }`}>
+                  {priceState.badgeVariant === "success" && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  )}
+                  {priceState.state}
                 </span>
               </div>
+              <span className="text-[10px] text-slate-500 font-medium">
+                Used for entry condition
+              </span>
+            </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-2">
+            <div className="flex-grow flex flex-col justify-center py-6">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <span className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">Underlying LTP</span>
                   <span className={`text-xl font-extrabold mt-1 block font-mono ${
@@ -621,7 +621,7 @@ export const StrategyDetails: React.FC = () => {
 
               {/* Trigger price warning callout */}
               {showWarning && (
-                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] p-2 rounded-lg flex items-start gap-1.5 shadow-lg mt-2">
+                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] p-2 rounded-lg flex items-start gap-1.5 shadow-lg mt-4">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>
                     Trigger price is far from current price.
@@ -631,7 +631,7 @@ export const StrategyDetails: React.FC = () => {
 
               {/* Live Price Error or Disconnected Warning Callout */}
               {isRunning && priceState.state === "Live Disconnected" && (
-                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] p-2 rounded-lg flex items-start gap-1.5 shadow-lg mt-2">
+                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] p-2 rounded-lg flex items-start gap-1.5 shadow-lg mt-4">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>
                     Start strategy again or reconnect broker session.
@@ -640,7 +640,7 @@ export const StrategyDetails: React.FC = () => {
               )}
 
               {isRunning && priceState.state === "Broker Session Expired" && (
-                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] p-2 rounded-lg flex items-start gap-1.5 shadow-lg mt-2">
+                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] p-2 rounded-lg flex items-start gap-1.5 shadow-lg mt-4">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>
                     Broker session expired. Please log in again.
@@ -666,7 +666,7 @@ export const StrategyDetails: React.FC = () => {
           </Card>
 
           {/* Runtime Status Card */}
-          <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col justify-between">
+          <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col justify-between h-full">
             <div>
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 mb-3">
                 <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">

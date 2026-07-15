@@ -20,18 +20,43 @@ export const ExitPlanCard: React.FC<ExitPlanCardProps> = ({
 }) => {
   if (!position || position.status !== "OPEN") {
     return (
-      <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col items-center justify-center text-center space-y-2">
-        <div className="flex items-center justify-between w-full border-b border-slate-800/80 pb-2 mb-1">
-          <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-            <Compass className="h-4.5 w-4.5 text-indigo-400" />
-            Exit Plan
-          </h3>
+      <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col h-full justify-between">
+        <div>
+          <div className="flex items-center justify-between w-full border-b border-slate-800/80 pb-2 mb-1">
+            <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+              <Compass className="h-4.5 w-4.5 text-indigo-400" />
+              Exit Plan
+            </h3>
+          </div>
+          <div className="flex flex-col items-center justify-center py-12 space-y-3">
+            <div className="p-3 bg-slate-950/40 rounded-full border border-slate-800/50">
+              <Compass className="h-8 w-8 text-slate-600 animate-pulse" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-slate-400 text-xs font-semibold text-center">No Open Position</p>
+              <p className="text-slate-500 text-[11px] max-w-[200px] text-center leading-normal">
+                Exit plan will appear automatically after entry.
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col items-center justify-center py-4 space-y-1.5">
-          <Compass className="h-8 w-8 text-slate-700 animate-pulse" />
-          <p className="text-slate-500 text-xs font-medium">
-            No open position. Exit plan will appear after entry.
-          </p>
+
+        {/* Placeholder skeleton levels for target/SL to balance the layout and look premium */}
+        <div className="border-t border-slate-800/40 pt-3 space-y-2.5 opacity-20 select-none pointer-events-none">
+          <div className="flex justify-between items-center text-xs font-mono">
+            <span className="flex items-center gap-1.5 font-bold text-emerald-500/80">
+              <Target className="h-3.5 w-3.5" />
+              Target Level
+            </span>
+            <span className="text-slate-400">₹--.--</span>
+          </div>
+          <div className="flex justify-between items-center text-xs font-mono border-t border-slate-800/40 pt-2.5">
+            <span className="flex items-center gap-1.5 font-bold text-rose-500/80">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              Stop Loss Level
+            </span>
+            <span className="text-slate-400">₹--.--</span>
+          </div>
         </div>
       </Card>
     );
@@ -41,69 +66,71 @@ export const ExitPlanCard: React.FC<ExitPlanCardProps> = ({
   const isLong = exitPlan.side === "LONG";
 
   return (
-    <Card className="border-slate-800 bg-slate-900/40 p-4 space-y-4">
-      {/* Title Header */}
-      <div className="flex flex-col gap-1 border-b border-slate-800/80 pb-2">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-            <Compass className="h-4.5 w-4.5 text-indigo-400" />
-            Exit Plan
-          </h3>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-slate-400 font-mono font-bold">
-              {exitPlan.symbol}
+    <Card className="border-slate-800 bg-slate-900/40 p-4 flex flex-col h-full justify-between">
+      <div className="space-y-4">
+        {/* Title Header */}
+        <div className="flex flex-col gap-1 border-b border-slate-800/80 pb-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+              <Compass className="h-4.5 w-4.5 text-indigo-400" />
+              Exit Plan
+            </h3>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-slate-400 font-mono font-bold">
+                {exitPlan.symbol}
+              </span>
+              <Badge variant={isLong ? "success" : "danger"} className="px-1.5 py-0.5 text-[10px]">
+                {exitPlan.side}
+              </Badge>
+            </div>
+          </div>
+          <span className="text-[10px] text-slate-500 font-medium">
+            Based on trade instrument price
+          </span>
+        </div>
+
+        {/* Grid: Entry Price & Current Price & Action */}
+        <div className="grid grid-cols-2 gap-3 text-xs font-mono">
+          <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/30">
+            <span className="text-slate-500 block text-[9px] font-semibold uppercase tracking-wider mb-0.5">
+              Entry Price
             </span>
-            <Badge variant={isLong ? "success" : "danger"} className="px-1.5 py-0.5 text-[10px]">
-              {exitPlan.side}
-            </Badge>
+            <span className="text-slate-200 font-bold">
+              {formatCurrency(exitPlan.avgPrice)}
+            </span>
+            <span className="text-[9px] text-slate-500 block mt-0.5">
+              Qty: {exitPlan.quantity}
+            </span>
+          </div>
+
+          <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/30">
+            <span className="text-slate-500 block text-[9px] font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1">
+              <Activity className="h-3 w-3 text-emerald-400" />
+              Current Price
+            </span>
+            <span className="text-emerald-400 font-bold">
+              {currentPrice !== null && currentPrice !== undefined
+                ? formatCurrency(currentPrice)
+                : "Loading..."}
+            </span>
           </div>
         </div>
-        <span className="text-[10px] text-slate-500 font-medium">
-          Based on trade instrument price
-        </span>
-      </div>
 
-      {/* Grid: Entry Price & Current Price & Action */}
-      <div className="grid grid-cols-2 gap-3 text-xs font-mono">
-        <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/30">
-          <span className="text-slate-500 block text-[9px] font-semibold uppercase tracking-wider mb-0.5">
-            Entry Price
-          </span>
-          <span className="text-slate-200 font-bold">
-            {formatCurrency(exitPlan.avgPrice)}
-          </span>
-          <span className="text-[9px] text-slate-500 block mt-0.5">
-            Qty: {exitPlan.quantity}
-          </span>
+        <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/30 text-xs flex justify-between items-center font-mono">
+          <div className="flex items-center gap-2">
+            <ArrowRightLeft className="h-3.5 w-3.5 text-blue-400" />
+            <span className="text-slate-400 font-semibold uppercase tracking-wider text-[9px]">
+              Exit Action
+            </span>
+          </div>
+          <Badge variant={exitPlan.exitAction === "BUY" ? "info" : "warning"} className="px-1.5 py-0.5 text-[10px]">
+            {exitPlan.exitAction}
+          </Badge>
         </div>
-
-        <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/30">
-          <span className="text-slate-500 block text-[9px] font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1">
-            <Activity className="h-3 w-3 text-emerald-400" />
-            Current Price
-          </span>
-          <span className="text-emerald-400 font-bold">
-            {currentPrice !== null && currentPrice !== undefined
-              ? formatCurrency(currentPrice)
-              : "Loading..."}
-          </span>
-        </div>
-      </div>
-
-      <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/30 text-xs flex justify-between items-center font-mono">
-        <div className="flex items-center gap-2">
-          <ArrowRightLeft className="h-3.5 w-3.5 text-blue-400" />
-          <span className="text-slate-400 font-semibold uppercase tracking-wider text-[9px]">
-            Exit Action
-          </span>
-        </div>
-        <Badge variant={exitPlan.exitAction === "BUY" ? "info" : "warning"} className="px-1.5 py-0.5 text-[10px]">
-          {exitPlan.exitAction}
-        </Badge>
       </div>
 
       {/* Target & Stop Loss Levels */}
-      <div className="space-y-3 pt-2 border-t border-slate-900/60">
+      <div className="space-y-3 pt-3 border-t border-slate-800/40 mt-auto">
         {/* Target Level */}
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs font-mono">
@@ -141,7 +168,7 @@ export const ExitPlanCard: React.FC<ExitPlanCardProps> = ({
         </div>
 
         {/* Stop Loss Level */}
-        <div className="space-y-1 pt-2 border-t border-slate-900/40">
+        <div className="space-y-1 pt-2 border-t border-slate-800/40">
           <div className="flex items-center justify-between text-xs font-mono">
             <span className="text-rose-400 font-bold flex items-center gap-1">
               <ShieldAlert className="h-3.5 w-3.5" />

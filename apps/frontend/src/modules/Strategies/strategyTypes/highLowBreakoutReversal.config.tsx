@@ -100,7 +100,7 @@ export const HighLowBreakoutReversalConfig = {
         {/* Live 5-Min Candle Panel */}
         <div className="bg-slate-950/40 p-3 rounded-lg border border-slate-800/80 space-y-2">
           <div className="flex justify-between items-center">
-            <span className="font-bold text-slate-350 uppercase tracking-wide">Live 5-Min Candle Info</span>
+            <span className="font-bold text-slate-300 uppercase tracking-wide">Live 5-Min Candle Info</span>
             {lastCandle && (
               <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${isBearish ? "bg-red-500/20 text-red-400" : isBullish ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"}`}>
                 {isBearish ? "Bearish (RED)" : isBullish ? "Bullish (GREEN)" : "Neutral"}
@@ -190,7 +190,7 @@ export const HighLowBreakoutReversalConfig = {
           </div>
 
           {/* CALL Track (Green Theme) */}
-          <div className="bg-emerald-955/10 border border-emerald-900/30 p-3 rounded-lg space-y-3">
+          <div className="bg-emerald-950/10 border border-emerald-900/30 p-3 rounded-lg space-y-3">
             <div className="border-b border-emerald-900/20 pb-1.5 flex justify-between items-center">
               <span className="font-extrabold text-emerald-400 uppercase tracking-wider text-[10px]">CALL Track (Low Break)</span>
               <span className={`h-2 w-2 rounded-full ${callTrack.isTradeOpen ? "bg-emerald-500 animate-ping" : "bg-slate-700"}`} />
@@ -216,7 +216,7 @@ export const HighLowBreakoutReversalConfig = {
             </div>
 
             {callTrack.isTradeOpen ? (
-              <div className="bg-emerald-955/20 border border-emerald-900/40 p-2 rounded text-[11px] space-y-1">
+              <div className="bg-emerald-950/20 border border-emerald-900/40 p-2 rounded text-[11px] space-y-1">
                 <span className="font-bold text-emerald-400 uppercase tracking-widest text-[9px] block">Active CALL Position</span>
                 <div className="flex justify-between text-slate-400">
                   <span>Entry Spot</span>

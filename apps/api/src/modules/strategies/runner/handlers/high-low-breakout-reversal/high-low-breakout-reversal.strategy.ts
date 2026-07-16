@@ -1,379 +1,29 @@
-import { liveTickStore } from "../../../market-data/live/live-tick.store.js";
-import { AppError } from "../../../../errors/app-error.js";
+import { liveTickStore } from "../../../../market-data/live/live-tick.store.js";
+import { AppError } from "../../../../../errors/app-error.js";
 import type {
   StrategyContext,
   StrategyDecision,
   StrategyHandler,
-} from "./types.js";
-import { angelInstrumentProvider } from "../../../market-data/providers/angel-instrument.provider.js";
-import { AngelMarketDataProvider } from "../../../market-data/providers/angel.provider.js";
-import { PaperTradingService } from "../../../paper-trading/service.js";
-import { candlesCache } from "../../../market-data/candles-cache.js";
+} from "../types.js";
+import { angelInstrumentProvider } from "../../../../market-data/providers/angel-instrument.provider.js";
+import { AngelMarketDataProvider } from "../../../../market-data/providers/angel.provider.js";
+import { PaperTradingService } from "../../../../paper-trading/service.js";
 
-// Lazy-loaded dependencies to break circular imports at load time
-let replaySessions: any = null;
-let ReplayPaperService: any = null;
-let ReplayServiceClass: any = null;
-let getOptionPriceAtTimeFn: any = null;
-let liveMarketDataService: any = null;
-let realtimeService: any = null;
-
-async function loadDeps() {
-  if (!replaySessions) {
-    const mod = await import("../../../market-replay/replay.session.js");
-    replaySessions = mod.replaySessions;
-  }
-  if (!ReplayPaperService || !ReplayServiceClass || !getOptionPriceAtTimeFn) {
-    const mod = await import("../../../market-replay/replay.service.js");
-    ReplayPaperService = mod.ReplayPaperService;
-    ReplayServiceClass = mod.ReplayService;
-    getOptionPriceAtTimeFn = mod.getOptionPriceAtTime;
-  }
-  if (!liveMarketDataService) {
-    const mod = await import("../../../market-data/live/live-market-data.service.js");
-    liveMarketDataService = mod.liveMarketDataService;
-  }
-  if (!realtimeService) {
-    const mod = await import("../../../realtime/realtime.service.js");
-    realtimeService = mod.realtimeService;
-  }
-}
-
-function getKolkataDateStr(date: Date): string {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const parts = formatter.formatToParts(date);
-  const getVal = (type: string) => parts.find((p) => p.type === type)?.value || "";
-  return `${getVal("year")}-${getVal("month")}-${getVal("day")}`;
-}
-
-// Helper: check if currentTime is past EOD square-off time (e.g. 15:15) in Asia/Kolkata timezone
-function isPastSquareOffTime(currentTime: Date, squareOffTimeStr?: string): boolean {
-  const squareOffStr = squareOffTimeStr || "15:15";
-  const parts = squareOffStr.split(":");
-  const targetHours = Number(parts[0]) || 15;
-  const targetMinutes = Number(parts[1]) || 15;
-
-  // Convert currentTime to Kolkata timezone
-  const kolkataTime = new Date(currentTime.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-  const hours = kolkataTime.getHours();
-  const minutes = kolkataTime.getMinutes();
-
-  if (hours > targetHours) return true;
-  if (hours === targetHours && minutes >= targetMinutes) return true;
-  return false;
-}
-
-// Helper: group 1-minute candles into 5-minute candles closed (purely data-driven)
-function getFiveMinuteCandles(candles1m: any[]) {
-  const buckets: Record<number, any[]> = {};
-  for (const c of candles1m) {
-    const bucketStart = Math.floor(c.time / 300) * 300;
-    if (!buckets[bucketStart]) {
-      buckets[bucketStart] = [];
-    }
-    buckets[bucketStart].push(c);
-  }
-
-  const result: any[] = [];
-  const sortedStarts = Object.keys(buckets).map(Number).sort((a, b) => a - b);
-  const maxTime = candles1m.length > 0 ? candles1m[candles1m.length - 1].time : 0;
-
-  for (const start of sortedStarts) {
-    // Closed only if the visible dataset has reached the start of the next candle
-    if (maxTime < start + 300) {
-      continue;
-    }
-
-    const group = buckets[start] || [];
-    if (group.length === 0) continue;
-    group.sort((a, b) => a.time - b.time);
-
-    result.push({
-      time: start,
-      open: group[0].open,
-      high: Math.max(...group.map(g => g.high)),
-      low: Math.min(...group.map(g => g.low)),
-      close: group[group.length - 1].close,
-    });
-  }
-
-  return result;
-}
-
-// Helper: fetch 1-minute candles for live/paper trading
-async function get1MinuteCandles(
-  app: any,
-  brokerAccountId: string,
-  exchange: string,
-  symbolToken: string,
-  currentTime: Date,
-) {
-  const brokerAccount = await app.db.brokerAccount.findUnique({
-    where: { id: brokerAccountId },
-  });
-  if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
-    throw new AppError("Broker account session is missing", 400, "BROKER_SESSION_ERROR");
-  }
-  const formatKolkata = (date: Date) => {
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Kolkata",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-    const parts = formatter.formatToParts(date);
-    const getVal = (type: string) => parts.find((p) => p.type === type)?.value || "";
-    return {
-      dateStr: `${getVal("year")}-${getVal("month")}-${getVal("day")}`,
-      timeStr: `${getVal("hour")}:${getVal("minute")}`,
-    };
-  };
-
-  const kolkataTime = formatKolkata(currentTime);
-  const toDateStr = `${kolkataTime.dateStr} ${kolkataTime.timeStr}`;
-  const fromDateStr = `${kolkataTime.dateStr} 09:15`;
-
-  const cached = candlesCache.get(
-    brokerAccountId,
-    exchange,
-    symbolToken,
-    "ONE_MINUTE",
-    fromDateStr,
-    toDateStr,
-  );
-
-  let responseData: any;
-  if (cached) {
-    responseData = cached;
-  } else {
-    const provider = new AngelMarketDataProvider();
-    const response = await provider.getCandles({
-      apiKey: brokerAccount.apiKey,
-      accessToken: brokerAccount.accessToken,
-      query: {
-        brokerAccountId,
-        exchange,
-        symboltoken: symbolToken,
-        interval: "ONE_MINUTE",
-        fromDate: fromDateStr,
-        toDate: toDateStr,
-      },
-    });
-
-    if (!response || !response.status || !response.data) {
-      return [];
-    }
-    responseData = response.data;
-    candlesCache.set(
-      brokerAccountId,
-      exchange,
-      symbolToken,
-      "ONE_MINUTE",
-      fromDateStr,
-      toDateStr,
-      responseData,
-    );
-  }
-
-  return responseData.map((item: any) => {
-    let isoString = String(item[0]);
-    if (!isoString.includes("+") && !isoString.includes("Z")) {
-      const cleanTime = isoString.replace(" ", "T");
-      isoString = cleanTime.includes("T") ? `${cleanTime}+05:30` : `${cleanTime}T00:00:00+05:30`;
-    }
-    return {
-      time: Math.floor(new Date(isoString).getTime() / 1000),
-      open: Number(item[1]),
-      high: Number(item[2]),
-      low: Number(item[3]),
-      close: Number(item[4]),
-    };
-  });
-}
-
-// Helper: fetch yesterday's high/low
-async function getYesterdayHighLow(
-  app: any,
-  brokerAccountId: string,
-  exchange: string,
-  symbolToken: string,
-  currentDate: Date,
-): Promise<{ high: number; low: number }> {
-  const brokerAccount = await app.db.brokerAccount.findUnique({
-    where: { id: brokerAccountId },
-  });
-  if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
-    throw new AppError("Broker account session is missing", 400, "BROKER_SESSION_ERROR");
-  }
-
-  const toDate = new Date(currentDate);
-  toDate.setDate(toDate.getDate() - 1);
-  const fromDate = new Date(currentDate);
-  fromDate.setDate(fromDate.getDate() - 10);
-
-  const getKolkataDateOnly = (date: Date) => {
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Kolkata",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-    const parts = formatter.formatToParts(date);
-    const getVal = (type: string) => parts.find((p) => p.type === type)?.value || "";
-    return `${getVal("year")}-${getVal("month")}-${getVal("day")}`;
-  };
-
-  const fromDateStr = `${getKolkataDateOnly(fromDate)} 09:15`;
-  const toDateStr = `${getKolkataDateOnly(toDate)} 15:30`;
-
-  const provider = new AngelMarketDataProvider();
-  const response = await provider.getCandles({
-    apiKey: brokerAccount.apiKey,
-    accessToken: brokerAccount.accessToken,
-    query: {
-      brokerAccountId,
-      exchange,
-      symboltoken: symbolToken,
-      interval: "ONE_DAY",
-      fromDate: fromDateStr,
-      toDate: toDateStr,
-    },
-  });
-
-  if (!response || !response.status || !response.data || response.data.length === 0) {
-    throw new AppError("Failed to fetch yesterday's candle data", 502, "CANDLE_FETCH_ERROR");
-  }
-
-  const candles = response.data.map((item: any) => {
-    let isoString = String(item[0]);
-    if (!isoString.includes("+") && !isoString.includes("Z")) {
-      const cleanTime = isoString.replace(" ", "T");
-      isoString = cleanTime.includes("T") ? `${cleanTime}+05:30` : `${cleanTime}T00:00:00+05:30`;
-    }
-    return {
-      time: new Date(isoString).getTime(),
-      high: Number(item[2]),
-      low: Number(item[3]),
-    };
-  }).sort((a: any, b: any) => b.time - a.time);
-
-  return {
-    high: candles[0].high,
-    low: candles[0].low,
-  };
-}
-
-// Helper: update strategy state in DB/session
-async function updateStrategyState(context: StrategyContext, state: any) {
-  context.strategy.state = state;
-  await loadDeps();
-  const isReplay = replaySessions.has(context.strategy.userId);
-  if (!isReplay) {
-    await context.app.db.strategy.update({
-      where: { id: context.strategy.id },
-      data: { state: state as any },
-    });
-  }
-}
-
-async function addStrategyLog(context: StrategyContext, message: string, meta: any = {}) {
-  await loadDeps();
-  const isReplay = context.isReplay === true || replaySessions.has(context.strategy.userId);
-  if (isReplay) {
-    const session = replaySessions.get(context.strategy.userId);
-    if (session) {
-      const timeStr = session.currentTime
-        ? new Date(Number(session.currentTime) * 1000).toLocaleTimeString("en-IN", {
-            timeZone: "Asia/Kolkata",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false,
-          })
-        : "";
-      const prefix = timeStr ? `[${timeStr}] ` : "";
-      session.logs.push({
-        id: `log_${Math.random().toString(36).substring(2, 11)}`,
-        message: `${prefix}${message}`,
-        meta,
-        createdAt: new Date(),
-      });
-    }
-  } else {
-    await context.app.db.strategyLog.create({
-      data: {
-        strategyId: context.strategy.id,
-        message,
-        meta: meta || {},
-      },
-    });
-  }
-}
-
-async function getReplayOptionPriceWithFallback(
-  context: StrategyContext,
-  replaySession: any,
-  optionToken: string,
-  timestampSec: number,
-  fallbackOptionType: "CE" | "PE",
-  strike: number | undefined,
-  underlyingPrice: number,
-): Promise<number> {
-  let price = getOptionPriceAtTimeFn(replaySession, optionToken, timestampSec);
-  if (price !== null && price > 0) {
-    return price;
-  }
-
-  try {
-    const replayService = new ReplayServiceClass(context.app);
-    const sessionTime = new Date(Number(replaySession.currentTime) * 1000);
-    const date = getKolkataDateStr(sessionTime);
-    
-    await replayService.fetchOptionCandles(replaySession, optionToken, "NFO", date);
-    
-    price = getOptionPriceAtTimeFn(replaySession, optionToken, timestampSec);
-  } catch (err: any) {
-    await addStrategyLog(context, `[ERROR] Dynamic option candle fetch failed for token ${optionToken}: ${err.message}`);
-  }
-
-  if (price !== null && price > 0) {
-    return price;
-  }
-
-  const candles = replaySession.optionCandles?.get(optionToken) || [];
-  const count = candles.length;
-  const firstCandleTime = count > 0 ? new Date(candles[0].time * 1000).toISOString() : "N/A";
-  const lastCandleTime = count > 0 ? new Date(candles[count - 1].time * 1000).toISOString() : "N/A";
-  const requestedTimeStr = new Date(timestampSec * 1000).toISOString();
-
-  await addStrategyLog(
-    context,
-    `[OPTION DEBUG]\nToken: ${optionToken}\nRequested Time: ${requestedTimeStr}\nAvailable candles: ${count}\nFirst candle time: ${firstCandleTime}\nLast candle time: ${lastCandleTime}`
-  );
-
-  const appliedStrike = strike || underlyingPrice;
-  const intrinsic = fallbackOptionType === "CE"
-    ? Math.max(0, underlyingPrice - appliedStrike)
-    : Math.max(0, appliedStrike - underlyingPrice);
-
-  const timeValue = Math.max(50, Math.round(underlyingPrice * 0.01));
-  const simulatedPrice = Math.max(10, Math.round(intrinsic + timeValue));
-
-  await addStrategyLog(
-    context,
-    `[FALLBACK] Option price not available for token ${optionToken}. Using simulated fallback price: ${simulatedPrice} (Intrinsic: ${intrinsic}, TimeValue: ${timeValue})`
-  );
-
-  return simulatedPrice;
-}
+import {
+  loadDeps,
+  getReplaySessions,
+  getReplayPaperService,
+  getLiveMarketDataService,
+  getRealtimeService,
+  getKolkataDateStr,
+  isPastSquareOffTime,
+  getFiveMinuteCandles,
+  get1MinuteCandles,
+  getYesterdayHighLow,
+  updateStrategyState,
+  addStrategyLog,
+  getReplayOptionPriceWithFallback
+} from "./utils.js";
 
 export class HighLowBreakoutReversalStrategy implements StrategyHandler {
   strategyType = "HIGH_LOW_BREAKOUT_REVERSAL";
@@ -454,8 +104,8 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
 
     await loadDeps();
 
-    const isReplay = replaySessions.has(context.strategy.userId);
-    const replaySession = isReplay ? replaySessions.get(context.strategy.userId) : null;
+    const isReplay = getReplaySessions().has(context.strategy.userId);
+    const replaySession = isReplay ? getReplaySessions().get(context.strategy.userId) : null;
     const currentTime = replaySession?.currentTime
       ? new Date(Number(replaySession.currentTime) * 1000)
       : new Date();
@@ -491,7 +141,7 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
 
       if (!state.isSubscribed) {
         const subscriptions = this.getRequiredSubscriptions(context.strategy);
-        liveMarketDataService.subscribe(context.strategy.userId, brokerAccountId, subscriptions as any);
+        getLiveMarketDataService().subscribe(context.strategy.userId, brokerAccountId, subscriptions as any);
         state.isSubscribed = true;
         state.subscriptionStartTime = Date.now();
         await updateStrategyState(context, state);
@@ -514,11 +164,11 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
             });
             try {
               const subscriptions = this.getRequiredSubscriptions(context.strategy);
-              liveMarketDataService.unsubscribe(context.strategy.userId, brokerAccountId, subscriptions as any);
+              getLiveMarketDataService().unsubscribe(context.strategy.userId, brokerAccountId, subscriptions as any);
               await addStrategyLog(context, "Live market data unsubscribed");
             } catch {}
             await addStrategyLog(context, "Strategy stopped");
-            realtimeService.publishStrategyDataChanged(context.strategy.id, [
+            getRealtimeService().publishStrategyDataChanged(context.strategy.id, [
               "logs",
               "strategy",
               "runtime",
@@ -700,13 +350,13 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
         }
 
         if (isReplay) {
-          const paperService = new ReplayPaperService(replaySession!);
+          const paperService = new (getReplayPaperService())(replaySession!);
           await paperService.exitPosition(context.strategy.userId, state.putTrack.currentPositionId, { price: optionLtp });
         } else {
           const paperService = new PaperTradingService(context.app.db);
           await paperService.exitPosition(context.strategy.userId, state.putTrack.currentPositionId, { price: optionLtp });
           try {
-            liveMarketDataService.unsubscribe(context.strategy.userId, brokerAccountId, [
+            getLiveMarketDataService().unsubscribe(context.strategy.userId, brokerAccountId, [
               { exchangeType: 2, tokens: [state.putTrack.optionToken] }
             ]);
           } catch {}
@@ -767,13 +417,13 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
         }
 
         if (isReplay) {
-          const paperService = new ReplayPaperService(replaySession!);
+          const paperService = new (getReplayPaperService())(replaySession!);
           await paperService.exitPosition(context.strategy.userId, state.callTrack.currentPositionId, { price: optionLtp });
         } else {
           const paperService = new PaperTradingService(context.app.db);
           await paperService.exitPosition(context.strategy.userId, state.callTrack.currentPositionId, { price: optionLtp });
           try {
-            liveMarketDataService.unsubscribe(context.strategy.userId, brokerAccountId, [
+            getLiveMarketDataService().unsubscribe(context.strategy.userId, brokerAccountId, [
               { exchangeType: 2, tokens: [state.callTrack.optionToken] }
             ]);
           } catch {}
@@ -843,13 +493,13 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
 
           if (triggerExit) {
             if (isReplay) {
-              const paperService = new ReplayPaperService(replaySession!);
+              const paperService = new (getReplayPaperService())(replaySession!);
               await paperService.exitPosition(context.strategy.userId, state.putTrack.currentPositionId, { price: optionLtp });
             } else {
               const paperService = new PaperTradingService(context.app.db);
               await paperService.exitPosition(context.strategy.userId, state.putTrack.currentPositionId, { price: optionLtp });
               try {
-                liveMarketDataService.unsubscribe(context.strategy.userId, brokerAccountId, [
+                getLiveMarketDataService().unsubscribe(context.strategy.userId, brokerAccountId, [
                   { exchangeType: 2, tokens: [state.putTrack.optionToken] }
                 ]);
               } catch {}
@@ -922,13 +572,13 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
 
           if (triggerExit) {
             if (isReplay) {
-              const paperService = new ReplayPaperService(replaySession!);
+              const paperService = new (getReplayPaperService())(replaySession!);
               await paperService.exitPosition(context.strategy.userId, state.callTrack.currentPositionId, { price: optionLtp });
             } else {
               const paperService = new PaperTradingService(context.app.db);
               await paperService.exitPosition(context.strategy.userId, state.callTrack.currentPositionId, { price: optionLtp });
               try {
-                liveMarketDataService.unsubscribe(context.strategy.userId, brokerAccountId, [
+                getLiveMarketDataService().unsubscribe(context.strategy.userId, brokerAccountId, [
                   { exchangeType: 2, tokens: [state.callTrack.optionToken] }
                 ]);
               } catch {}
@@ -1087,7 +737,7 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                       state.putTrack.hasEnteredTrade = true;
                       context.strategy.state = state;
 
-                      const paperService = new ReplayPaperService(replaySession!);
+                      const paperService = new (getReplayPaperService())(replaySession!);
                       const orderResult = await paperService.createOrder(context.strategy.userId, {
                         strategyId: context.strategy.id,
                         brokerAccountId: replaySession!.brokerAccountId,
@@ -1174,7 +824,7 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                       optionEntryPrice = orderResult.position.avgPrice;
                       positionId = orderResult.position.id;
 
-                      liveMarketDataService.subscribe(context.strategy.userId, brokerAccountId, [
+                      getLiveMarketDataService().subscribe(context.strategy.userId, brokerAccountId, [
                         { exchangeType: 2, tokens: [peContract.token] }
                       ]);
                     }
@@ -1368,7 +1018,7 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                       state.callTrack.hasEnteredTrade = true;
                       context.strategy.state = state;
 
-                      const paperService = new ReplayPaperService(replaySession!);
+                      const paperService = new (getReplayPaperService())(replaySession!);
                       const orderResult = await paperService.createOrder(context.strategy.userId, {
                         strategyId: context.strategy.id,
                         brokerAccountId: replaySession!.brokerAccountId,
@@ -1455,7 +1105,7 @@ export class HighLowBreakoutReversalStrategy implements StrategyHandler {
                       optionEntryPrice = orderResult.position.avgPrice;
                       positionId = orderResult.position.id;
 
-                      liveMarketDataService.subscribe(context.strategy.userId, brokerAccountId, [
+                      getLiveMarketDataService().subscribe(context.strategy.userId, brokerAccountId, [
                         { exchangeType: 2, tokens: [ceContract.token] }
                       ]);
                     }

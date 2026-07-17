@@ -362,18 +362,10 @@ export async function getReplayOptionPriceWithFallback(
     `[OPTION DEBUG]\nToken: ${optionToken}\nRequested Time: ${requestedTimeStr}\nAvailable candles: ${count}\nFirst candle time: ${firstCandleTime}\nLast candle time: ${lastCandleTime}`
   );
 
-  const appliedStrike = strike || underlyingPrice;
-  const intrinsic = fallbackOptionType === "CE"
-    ? Math.max(0, underlyingPrice - appliedStrike)
-    : Math.max(0, appliedStrike - underlyingPrice);
-
-  const timeValue = Math.max(50, Math.round(underlyingPrice * 0.01));
-  const simulatedPrice = Math.max(10, Math.round(intrinsic + timeValue));
-
   await addStrategyLog(
     context,
-    `[FALLBACK] Option price not available for token ${optionToken}. Using simulated fallback price: ${simulatedPrice} (Intrinsic: ${intrinsic}, TimeValue: ${timeValue})`
+    `[OPTION ERROR] Option price not available for token ${optionToken} at ${requestedTimeStr}. Skipping trade.`
   );
 
-  return simulatedPrice;
+  return 0;
 }

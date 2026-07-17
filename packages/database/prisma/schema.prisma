@@ -64,6 +64,7 @@ model BrokerAccount {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([userId])
+  @@unique([userId, broker, clientId])
   @@map("broker_accounts")
 }
 

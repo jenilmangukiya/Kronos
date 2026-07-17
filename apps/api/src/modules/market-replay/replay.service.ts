@@ -462,16 +462,16 @@ export class ReplayService {
             `[Replay Service] Preloading option candles for ${relevantContracts.length} contracts (Strikes to load: ${strikesToLoad.join(", ")})`
           );
 
-          // Fetch in parallel
-          await Promise.all(
-            relevantContracts.map(async (c: any) => {
-              try {
-                await this.fetchOptionCandles(session, c.token, "NFO", replayDate);
-              } catch (err: any) {
-                this.app.log.warn(`[Replay Service] Failed to preload option candles for token ${c.token}: ${err.message}`);
-              }
-            })
-          );
+          // Fetch sequentially with rate-limit throttling (350ms delay between requests)
+          for (const c of relevantContracts) {
+            if (!session.isRunning) break;
+            try {
+              await this.fetchOptionCandles(session, c.token, "NFO", replayDate);
+              await new Promise((resolve) => setTimeout(resolve, 350));
+            } catch (err: any) {
+              this.app.log.warn(`[Replay Service] Failed to preload option candles for token ${c.token}: ${err.message}`);
+            }
+          }
           this.app.log.info(`[Replay Service] Preloading option candles completed`);
         }
       } catch (err: any) {

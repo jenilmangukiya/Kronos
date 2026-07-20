@@ -79,8 +79,8 @@ export class StrategyRunnerService {
     risk: unknown;
     state?: unknown;
   }) {
-    const activeReplay = replaySessions.get(strategy.userId);
-    if (activeReplay && activeReplay.strategyId === strategy.id) {
+    const activeReplay = replaySessions.get(strategy.id);
+    if (activeReplay) {
       // Skip live/paper evaluation while a replay session is active for this strategy
       return;
     }

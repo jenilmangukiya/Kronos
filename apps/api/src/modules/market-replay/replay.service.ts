@@ -236,11 +236,19 @@ export class ReplayService {
       low: candles[0].low,
     };
   }
+  private getSessionForUser(userId: string): ReplaySession | null {
+    for (const session of replaySessions.values()) {
+      if (session.userId === userId) {
+        return session;
+      }
+    }
+    return null;
+  }
 
   async startReplay(userId: string, input: StartReplayInput): Promise<ReplaySession> {
-    if (replaySessions.has(userId)) {
+    if (replaySessions.has(input.strategyId)) {
       throw new AppError(
-        "Active replay session already exists for this user",
+        "Active replay session already exists for this strategy",
         400,
         "REPLAY_SESSION_ALREADY_EXISTS",
       );
@@ -305,18 +313,18 @@ export class ReplayService {
       optionCandles: new Map(),
     };
 
-    replaySessions.set(userId, session);
+    replaySessions.set(session.strategyId, session);
 
     // Run replay loop in the background
     void this.runReplayLoop(session).catch((error) => {
-      this.app.log.error(error, `[Replay Service] Error in replay loop for user ${userId}`);
+      this.app.log.error(error, `[Replay Service] Error in replay loop for strategy ${input.strategyId}`);
     });
 
     return session;
   }
 
   async stopReplay(userId: string): Promise<void> {
-    const session = replaySessions.get(userId);
+    const session = this.getSessionForUser(userId);
     if (!session) {
       throw new AppError(
         "No active replay session found for this user",
@@ -327,11 +335,11 @@ export class ReplayService {
     session.isRunning = false;
     session.logs = [];
     session.positions = [];
-    replaySessions.delete(userId);
+    replaySessions.delete(session.strategyId);
   }
 
   async getSession(userId: string): Promise<any | null> {
-    const session = replaySessions.get(userId);
+    const session = this.getSessionForUser(userId);
     if (!session) return null;
 
     const totalTrades = session.totalTrades ?? 0;
@@ -347,7 +355,7 @@ export class ReplayService {
   }
 
   async pauseReplay(userId: string): Promise<void> {
-    const session = replaySessions.get(userId);
+    const session = this.getSessionForUser(userId);
     if (!session) {
       throw new AppError("No active replay session found for this user", 404, "REPLAY_SESSION_NOT_FOUND");
     }
@@ -355,7 +363,7 @@ export class ReplayService {
   }
 
   async resumeReplay(userId: string): Promise<void> {
-    const session = replaySessions.get(userId);
+    const session = this.getSessionForUser(userId);
     if (!session) {
       throw new AppError("No active replay session found for this user", 404, "REPLAY_SESSION_NOT_FOUND");
     }
@@ -363,7 +371,7 @@ export class ReplayService {
   }
 
   async stepReplay(userId: string): Promise<void> {
-    const session = replaySessions.get(userId);
+    const session = this.getSessionForUser(userId);
     if (!session) {
       throw new AppError("No active replay session found for this user", 404, "REPLAY_SESSION_NOT_FOUND");
     }
@@ -372,7 +380,6 @@ export class ReplayService {
     }
     session.shouldStep = true;
   }
-
   async runReplayLoop(session: ReplaySession): Promise<void> {
     const strategy = await this.app.db.strategy.findUnique({
       where: { id: session.strategyId },
@@ -386,6 +393,8 @@ export class ReplayService {
 
     // Reset strategy state for a fresh replay session
     strategy.state = {};
+    const virtualBrokerId = `replay_${strategy.id}`;
+    strategy.brokerAccountId = virtualBrokerId;
 
     const rules = strategy.rules as any;
     const trade = strategy.trade as any;
@@ -500,8 +509,10 @@ export class ReplayService {
           session.shouldStep = false;
         }
 
+        const virtualBrokerId = `replay_${strategy.id}`;
+
         // Push tick to liveTickStore
-        liveTickStore.setTick(session.brokerAccountId, {
+        liveTickStore.setTick(virtualBrokerId, {
           token: underlyingToken,
           sequenceNumber: "",
           exchangeTimestamp: candle.time * 1000,
@@ -535,7 +546,7 @@ export class ReplayService {
           }
         }
 
-        session.currentTradePrice = openPositionLtp ?? liveTickStore.getTick(session.brokerAccountId, trade.token)?.ltp ?? price;
+        session.currentTradePrice = openPositionLtp ?? liveTickStore.getTick(virtualBrokerId, trade.token)?.ltp ?? price;
 
         // Evaluate Strategy
         const handler = strategyRegistry.get(strategy.strategyType);
@@ -609,6 +620,7 @@ export class ReplayService {
             const decision = await handler.evaluateEntry({
               app: this.app,
               strategy,
+              isReplay: true,
             });
 
             if (decision.shouldExecute) {
@@ -625,7 +637,7 @@ export class ReplayService {
               const paperService = new ReplayPaperService(session);
               await paperService.createOrder(session.userId, {
                 strategyId: strategy.id,
-                brokerAccountId: session.brokerAccountId,
+                brokerAccountId: virtualBrokerId,
                 instrumentType: trade.instrumentType as any,
                 token: trade.token,
                 symbol: trade.symbol,
@@ -661,7 +673,7 @@ export class ReplayService {
     userId: string,
     input: { symbol: string; interval: "1m" | "5m"; date: string }
   ): Promise<ReplayCandle[]> {
-    const session = replaySessions.get(userId);
+    const session = this.getSessionForUser(userId);
     if (!session) {
       throw new AppError(
         "No active replay session found for this user",

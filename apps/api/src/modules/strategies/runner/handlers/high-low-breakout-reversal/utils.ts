@@ -118,8 +118,21 @@ export async function get1MinuteCandles(
   symbolToken: string,
   currentTime: Date,
 ) {
+  let actualBrokerAccountId = brokerAccountId;
+  if (brokerAccountId.startsWith("replay_")) {
+    const strategyId = brokerAccountId.replace("replay_", "");
+    const strategy = await app.db.strategy.findUnique({
+      where: { id: strategyId },
+      select: { brokerAccountId: true },
+    });
+    if (!strategy || !strategy.brokerAccountId) {
+      throw new AppError("Broker account session is missing for replay strategy", 400, "BROKER_SESSION_ERROR");
+    }
+    actualBrokerAccountId = strategy.brokerAccountId;
+  }
+
   const brokerAccount = await app.db.brokerAccount.findUnique({
-    where: { id: brokerAccountId },
+    where: { id: actualBrokerAccountId },
   });
   if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
     throw new AppError("Broker account session is missing", 400, "BROKER_SESSION_ERROR");
@@ -211,8 +224,21 @@ export async function getYesterdayHighLow(
   symbolToken: string,
   currentDate: Date,
 ): Promise<{ high: number; low: number }> {
+  let actualBrokerAccountId = brokerAccountId;
+  if (brokerAccountId.startsWith("replay_")) {
+    const strategyId = brokerAccountId.replace("replay_", "");
+    const strategy = await app.db.strategy.findUnique({
+      where: { id: strategyId },
+      select: { brokerAccountId: true },
+    });
+    if (!strategy || !strategy.brokerAccountId) {
+      throw new AppError("Broker account session is missing for replay strategy", 400, "BROKER_SESSION_ERROR");
+    }
+    actualBrokerAccountId = strategy.brokerAccountId;
+  }
+
   const brokerAccount = await app.db.brokerAccount.findUnique({
-    where: { id: brokerAccountId },
+    where: { id: actualBrokerAccountId },
   });
   if (!brokerAccount || !brokerAccount.apiKey || !brokerAccount.accessToken) {
     throw new AppError("Broker account session is missing", 400, "BROKER_SESSION_ERROR");
@@ -277,9 +303,7 @@ export async function getYesterdayHighLow(
 
 export async function updateStrategyState(context: StrategyContext, state: any) {
   context.strategy.state = state;
-  await loadDeps();
-  const isReplay = replaySessions.has(context.strategy.userId);
-  if (!isReplay) {
+  if (!context.isReplay) {
     await context.app.db.strategy.update({
       where: { id: context.strategy.id },
       data: { state: state as any },
@@ -289,9 +313,9 @@ export async function updateStrategyState(context: StrategyContext, state: any) 
 
 export async function addStrategyLog(context: StrategyContext, message: string, meta: any = {}) {
   await loadDeps();
-  const isReplay = context.isReplay === true || replaySessions.has(context.strategy.userId);
+  const isReplay = context.isReplay === true || replaySessions.has(context.strategy.id);
   if (isReplay) {
-    const session = replaySessions.get(context.strategy.userId);
+    const session = replaySessions.get(context.strategy.id);
     if (session) {
       const timeStr = session.currentTime
         ? new Date(Number(session.currentTime) * 1000).toLocaleTimeString("en-IN", {
